@@ -3,310 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gacha Machine — Color Configurator</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Gata-Gata Gacha Machine — Color Customizer</title>
+  <link rel="stylesheet" href="src/styles.css" />
 
-  <!--
-    Import map: tells the browser where to find the three.js ESM packages.
-    Pinned to r160 for stability. Update the version string to upgrade.
-  -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three":                          "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/":                  "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-    }
-  }
-  </script>
+  <!-- jsPDF via CDN (no bundler required for Phase 1) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
+  <div id="app">
 
-<div id="app">
-
-  <!-- ═══════════════════════════════════════════
-       Header bar
-  ═══════════════════════════════════════════ -->
-  <header id="header">
-    <div class="logo" aria-hidden="true">🎰</div>
-    <h1>Gacha Machine — Color Configurator</h1>
-    <!-- Hamburger for mobile -->
-    <button id="menu-toggle" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
-  </header>
-
-  <div id="main">
-
-    <!-- ═══════════════════════════════════════════
-         Sidebar panel
-    ═══════════════════════════════════════════ -->
-    <aside id="sidebar" role="complementary" aria-label="Color controls">
-
-      <!-- ── Part selector ───────────────────── -->
-      <section class="panel-section">
-        <p class="section-title">Select Part</p>
-        <div id="part-tabs" role="tablist">
-          <button class="part-tab active" role="tab" aria-selected="true"
-                  data-part="Body"   onclick="selectPart('Body')">Body</button>
-          <button class="part-tab"        role="tab" aria-selected="false"
-                  data-part="Door"   onclick="selectPart('Door')">Door</button>
-          <button class="part-tab"        role="tab" aria-selected="false"
-                  data-part="Trim"   onclick="selectPart('Trim')">Trim</button>
-          <button class="part-tab"        role="tab" aria-selected="false"
-                  data-part="Accent" onclick="selectPart('Accent')">Accent</button>
-        </div>
-      </section>
-
-      <!-- ── Color picker for selected part ──── -->
-      <section class="panel-section">
-        <p class="section-title">Part Color</p>
-
-        <!-- Body -->
-        <div id="picker-Body" class="picker-row" aria-label="Body color">
-          <label for="color-body">Body</label>
-          <div class="color-input-wrap">
-            <input type="color" id="color-body"
-                   data-part="Body" value="#e63946"
-                   oninput="onColorInput(this)" aria-label="Body color picker" />
-          </div>
-          <input type="text" id="hex-body" class="hex-input"
-                 value="#E63946" maxlength="7" placeholder="#rrggbb"
-                 oninput="onHexInput(this, 'Body')" aria-label="Body hex value" />
-        </div>
-
-        <!-- Door -->
-        <div id="picker-Door" class="picker-row" style="display:none" aria-label="Door color">
-          <label for="color-door">Door</label>
-          <div class="color-input-wrap">
-            <input type="color" id="color-door"
-                   data-part="Door" value="#457b9d"
-                   oninput="onColorInput(this)" aria-label="Door color picker" />
-          </div>
-          <input type="text" id="hex-door" class="hex-input"
-                 value="#457B9D" maxlength="7" placeholder="#rrggbb"
-                 oninput="onHexInput(this, 'Door')" aria-label="Door hex value" />
-        </div>
-
-        <!-- Trim -->
-        <div id="picker-Trim" class="picker-row" style="display:none" aria-label="Trim color">
-          <label for="color-trim">Trim</label>
-          <div class="color-input-wrap">
-            <input type="color" id="color-trim"
-                   data-part="Trim" value="#1d3557"
-                   oninput="onColorInput(this)" aria-label="Trim color picker" />
-          </div>
-          <input type="text" id="hex-trim" class="hex-input"
-                 value="#1D3557" maxlength="7" placeholder="#rrggbb"
-                 oninput="onHexInput(this, 'Trim')" aria-label="Trim hex value" />
-        </div>
-
-        <!-- Accent -->
-        <div id="picker-Accent" class="picker-row" style="display:none" aria-label="Accent color">
-          <label for="color-accent">Accent</label>
-          <div class="color-input-wrap">
-            <input type="color" id="color-accent"
-                   data-part="Accent" value="#f1c40f"
-                   oninput="onColorInput(this)" aria-label="Accent color picker" />
-          </div>
-          <input type="text" id="hex-accent" class="hex-input"
-                 value="#F1C40F" maxlength="7" placeholder="#rrggbb"
-                 oninput="onHexInput(this, 'Accent')" aria-label="Accent hex value" />
-        </div>
-      </section>
-
-      <!-- ── Preset swatches ───────────────────── -->
-      <section class="panel-section">
-        <p class="section-title">Color Presets</p>
-        <div id="preset-swatches" role="group" aria-label="Preset colors">
-          <button class="swatch" data-color="#e63946" title="Red"          style="background:#e63946" onclick="applyPreset(this)" aria-label="Red"></button>
-          <button class="swatch" data-color="#ff6b6b" title="Coral"        style="background:#ff6b6b" onclick="applyPreset(this)" aria-label="Coral"></button>
-          <button class="swatch" data-color="#f1c40f" title="Yellow"       style="background:#f1c40f" onclick="applyPreset(this)" aria-label="Yellow"></button>
-          <button class="swatch" data-color="#2ecc71" title="Emerald"      style="background:#2ecc71" onclick="applyPreset(this)" aria-label="Emerald"></button>
-          <button class="swatch" data-color="#457b9d" title="Steel Blue"   style="background:#457b9d" onclick="applyPreset(this)" aria-label="Steel Blue"></button>
-          <button class="swatch" data-color="#1d3557" title="Navy"         style="background:#1d3557" onclick="applyPreset(this)" aria-label="Navy"></button>
-          <button class="swatch" data-color="#9b59b6" title="Purple"       style="background:#9b59b6" onclick="applyPreset(this)" aria-label="Purple"></button>
-          <button class="swatch" data-color="#e67e22" title="Orange"       style="background:#e67e22" onclick="applyPreset(this)" aria-label="Orange"></button>
-          <button class="swatch" data-color="#ecf0f1" title="White"        style="background:#ecf0f1; border:1px solid #555" onclick="applyPreset(this)" aria-label="White"></button>
-          <button class="swatch" data-color="#2c3e50" title="Charcoal"     style="background:#2c3e50" onclick="applyPreset(this)" aria-label="Charcoal"></button>
-          <button class="swatch" data-color="#a0522d" title="Sienna"       style="background:#a0522d" onclick="applyPreset(this)" aria-label="Sienna"></button>
-          <button class="swatch" data-color="#b0c4de" title="Light Steel"  style="background:#b0c4de" onclick="applyPreset(this)" aria-label="Light Steel"></button>
-        </div>
-      </section>
-
-      <!-- ── Finish selector ───────────────────── -->
-      <section class="panel-section">
-        <p class="section-title">Finish</p>
-        <div id="finish-options" role="group" aria-label="Surface finish">
-          <button class="finish-btn"       data-finish="matte"    onclick="applyFinish(this)">Matte</button>
-          <button class="finish-btn active" data-finish="gloss"   onclick="applyFinish(this)">Gloss</button>
-          <button class="finish-btn"       data-finish="metallic" onclick="applyFinish(this)">Metallic</button>
-        </div>
-      </section>
-
-      <!-- ── Actions ───────────────────────────── -->
-      <section class="panel-section">
-        <p class="section-title">Actions</p>
-        <div id="action-buttons">
-          <button class="btn btn-primary"   onclick="window.configurator.saveScreenshot()">📷 Save Screenshot</button>
-          <button class="btn btn-danger"    onclick="window.configurator.resetDefaults(); syncUIFromDefaults()">↺ Reset to Default</button>
-        </div>
-      </section>
-
-    </aside><!-- /sidebar -->
-
-    <!-- ═══════════════════════════════════════════
-         3D Viewer canvas
-    ═══════════════════════════════════════════ -->
-    <div id="viewer-container" role="img" aria-label="3D model preview">
-
-      <!-- Loading spinner -->
-      <div id="loading-overlay" role="status" aria-live="polite">
-        <div class="spinner" aria-hidden="true"></div>
-        <p class="loading-text">Loading model…</p>
+    <!-- ── Header ─────────────────────────────────────────────────────── -->
+    <header>
+      <h1>⚙️ Gata-Gata Gacha Machine — Color Customizer</h1>
+      <div class="header-actions">
+        <button id="btn-share" class="btn btn-secondary" title="Copy shareable link">
+          🔗 Share
+        </button>
+        <button id="btn-export-pdf" class="btn btn-primary" title="Export build blueprint PDF">
+          📄 Export PDF
+        </button>
       </div>
+    </header>
 
-      <!-- Model status badge -->
-      <div id="model-status" aria-live="polite"></div>
+    <!-- ── Parts sidebar ──────────────────────────────────────────────── -->
+    <aside id="sidebar">
+      <h2>Parts</h2>
+      <ul id="parts-list"></ul>
+    </aside>
 
-      <!-- Keyboard / mouse hint -->
-      <div id="controls-hint" aria-hidden="true">
-        🖱 Drag to rotate &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Right-drag to pan
+    <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
+    <div id="viewer-wrap">
+      <div id="viewer">
+        <p style="color:#8892a4;font-size:0.9rem;">Loading machine preview…</p>
       </div>
+    </div>
 
-      <!-- three.js renders into this canvas -->
-      <canvas id="three-canvas"></canvas>
+    <!-- ── Color palette panel ────────────────────────────────────────── -->
+    <section id="palette-panel">
+      <h2>Bambu PLA Colors</h2>
+      <div id="selected-info">
+        <span id="selected-color"></span>
+      </div>
+      <div id="palette-scroll">
+        <div id="palette-grid"></div>
+      </div>
+      <div id="color-name"></div>
+    </section>
 
-    </div><!-- /viewer-container -->
+    <!-- ── Footer ─────────────────────────────────────────────────────── -->
+    <footer>
+      <span>Lightning Bug Club &mdash; <a href="https://lightningbugclub.com" target="_blank" rel="noopener">lightningbugclub.com</a></span>
+      <span>Phase 1: 2D Orthographic &mdash; Phase 2: Three.js 3D (roadmap)</span>
+    </footer>
 
-  </div><!-- /main -->
-</div><!-- /app -->
+  </div>
 
-<!-- ═══════════════════════════════════════════
-     UI interaction script (no build step needed)
-═══════════════════════════════════════════ -->
-<script>
-  // ── State ────────────────────────────────────────────────
-  let activePart = 'Body';
-
-  // ── Part tab switching ───────────────────────────────────
-  function selectPart(partName) {
-    activePart = partName;
-
-    // Update tab buttons
-    document.querySelectorAll('.part-tab').forEach((btn) => {
-      const isActive = btn.dataset.part === partName;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    });
-
-    // Show/hide picker rows
-    ['Body', 'Door', 'Trim', 'Accent'].forEach((p) => {
-      const row = document.getElementById('picker-' + p);
-      if (row) row.style.display = (p === partName) ? 'flex' : 'none';
-    });
-  }
-
-  // ── Color input (native color picker) ───────────────────
-  function onColorInput(inputEl) {
-    const partName = inputEl.dataset.part;
-    const hex      = inputEl.value;
-
-    // Sync hex text field
-    const hexInput = document.getElementById('hex-' + partName.toLowerCase());
-    if (hexInput) hexInput.value = hex.toUpperCase();
-
-    // Push to three.js
-    if (window.configurator) window.configurator.setPartColor(partName, hex);
-  }
-
-  // ── Hex text input ───────────────────────────────────────
-  function onHexInput(inputEl, partName) {
-    let val = inputEl.value.trim();
-    if (!val.startsWith('#')) val = '#' + val;
-
-    // Validate: must be #rrggbb — show visual feedback if invalid
-    if (!/^#[0-9a-fA-F]{6}$/.test(val)) {
-      inputEl.style.borderColor = '#e05a5a';
-      inputEl.setAttribute('aria-invalid', 'true');
-      return;
-    }
-    inputEl.style.borderColor = '';
-    inputEl.setAttribute('aria-invalid', 'false');
-
-    // Sync color picker
-    const colorPicker = document.getElementById('color-' + partName.toLowerCase());
-    if (colorPicker) colorPicker.value = val.toLowerCase();
-
-    // Push to three.js
-    if (window.configurator) window.configurator.setPartColor(partName, val);
-  }
-
-  // ── Preset swatch ────────────────────────────────────────
-  function applyPreset(btn) {
-    const hex = btn.dataset.color;
-    if (!hex || !activePart) return;
-
-    // Sync picker + hex field for active part
-    const colorPicker = document.getElementById('color-' + activePart.toLowerCase());
-    const hexInput    = document.getElementById('hex-'   + activePart.toLowerCase());
-    if (colorPicker) colorPicker.value = hex;
-    if (hexInput)    hexInput.value    = hex.toUpperCase();
-
-    if (window.configurator) window.configurator.setPartColor(activePart, hex);
-
-    // Highlight active swatch
-    document.querySelectorAll('.swatch').forEach((s) =>
-      s.classList.toggle('active', s === btn));
-  }
-
-  // ── Finish selector ──────────────────────────────────────
-  function applyFinish(btn) {
-    const finish = btn.dataset.finish;
-    document.querySelectorAll('.finish-btn').forEach((b) =>
-      b.classList.toggle('active', b === btn));
-    if (window.configurator) window.configurator.setFinish(finish);
-  }
-
-  // ── Sync UI back to defaults (used by Reset button) ─────
-  function syncUIFromDefaults() {
-    const defaults = {
-      Body:   '#e63946',
-      Door:   '#457b9d',
-      Trim:   '#1d3557',
-      Accent: '#f1c40f',
-    };
-    for (const [part, hex] of Object.entries(defaults)) {
-      const lc = part.toLowerCase();
-      const cp = document.getElementById('color-' + lc);
-      const hi = document.getElementById('hex-'   + lc);
-      if (cp) cp.value = hex;
-      if (hi) hi.value = hex.toUpperCase();
-    }
-    // Reset finish to gloss
-    document.querySelectorAll('.finish-btn').forEach((b) =>
-      b.classList.toggle('active', b.dataset.finish === 'gloss'));
-    // Clear active swatches
-    document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
-  }
-
-  // ── Mobile hamburger ─────────────────────────────────────
-  const menuToggle = document.getElementById('menu-toggle');
-  const sidebar    = document.getElementById('sidebar');
-
-  menuToggle.addEventListener('click', () => {
-    const open = sidebar.classList.toggle('open');
-    menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-
-  // Close sidebar when clicking the viewer on mobile
-  document.getElementById('viewer-container').addEventListener('click', () => {
-    if (window.innerWidth <= 768) {
-      sidebar.classList.remove('open');
-      menuToggle.setAttribute('aria-expanded', 'false');
-    }
-  });
-</script>
-
-<!-- Load the three.js viewer as an ES module -->
-<script type="module" src="viewer.js"></script>
-
+  <!-- App entry point (ES module) -->
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,18 @@
+[
+  { "id": "lid",                    "label": "Lid",                    "defaultColorId": "bambu-green" },
+  { "id": "lid-lock",               "label": "Lid Lock",               "defaultColorId": "dark-gray" },
+  { "id": "top-chamber",            "label": "Top Chamber",            "defaultColorId": "cobalt-blue" },
+  { "id": "window",                 "label": "Window",                 "defaultColorId": "cyan" },
+  { "id": "hole-blocker",           "label": "Hole Blocker",           "defaultColorId": "jade-white" },
+  { "id": "mid-plate",              "label": "Mid-Plate",              "defaultColorId": "dark-gray" },
+  { "id": "main-gear",              "label": "Main Gear",              "defaultColorId": "gray" },
+  { "id": "coin-mech-back-plate",   "label": "Coin Mech. Back Plate",  "defaultColorId": "dark-gray" },
+  { "id": "coin-mech-front-plate",  "label": "Coin Mech. Front Plate", "defaultColorId": "cobalt-blue" },
+  { "id": "coin-mech-gear",         "label": "Coin Mech. Gear",        "defaultColorId": "gray" },
+  { "id": "knob",                   "label": "Knob",                   "defaultColorId": "red" },
+  { "id": "mouth",                  "label": "Mouth",                  "defaultColorId": "dark-gray" },
+  { "id": "bottom-chamber",         "label": "Bottom Chamber",         "defaultColorId": "cobalt-blue" },
+  { "id": "rear-lock-knob",         "label": "Rear Lock Knob",         "defaultColorId": "red" },
+  { "id": "bottom-plate",           "label": "Bottom Plate",           "defaultColorId": "dark-gray" },
+  { "id": "back-cover",             "label": "Back Cover",             "defaultColorId": "dark-gray" }
+]
