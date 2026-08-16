@@ -1,77 +1,59 @@
 # Gata-Gata Gacha Machine — Color Customizer
 
-A web-based color customizer for the [Gata-Gata gachapon vending machine](https://www.lightningbugclub.com/product/gatagata-gacha-machine-100-3d-printable/W4J4ZBI4S6XYEYQWZHEMS6OJ).  
-Select a part, choose a Bambu Lab PLA filament color, preview the result live, and export a build blueprint PDF.
+A car-configurator-style **2D SVG color customizer** for the [Gata-Gata gachapon vending machine](https://www.lightningbugclub.com/product/gatagata-gacha-machine-100-3d-printable/W4J4ZBI4S6XYEYQWZHEMS6OJ) by Lightning Bug Club.
+
+Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from the comprehensive palette, see the SVG recolor live, and export a build-blueprint PDF listing every part with its chosen filament color and product URL.
 
 ---
 
 ## Quick Start
 
-No build step is required for development. Open `index.html` directly, or serve with any static file server:
+No build step required. Serve with any static file server (ES modules require a server — `file://` will not work):
 
 ```bash
 # Python (built in)
 python3 -m http.server 8080
 
-# Node (npx)
+# Node
 npx serve .
-
-# VS Code — use Live Server extension
 ```
 
 Then open `http://localhost:8080` in your browser.
 
-> **Note:** ES modules require a server (not `file://`). Use one of the commands above.
+---
+
+## How It Works
+
+1. **Select a part** from the sidebar (or click directly on the SVG).
+2. **Choose a color** from the palette grid — the SVG recolors live.
+3. **Export PDF** to download a build blueprint with a color legend.
+
+The current URL is updated with a `?c=` parameter encoding all selections so builds can be bookmarked and shared.
 
 ---
 
-## Project Structure
+## Module Map
 
 ```
-├── index.html                   # App shell
+├── index.html                  # App shell — loads src/main.js as an ES module
 ├── src/
-│   ├── main.js                  # Entry point — wires everything together
-│   ├── palette.js               # Loads Bambu PLA color data
-│   ├── parts.js                 # Loads parts definitions
-│   ├── state.js                 # Config state + URL encode/decode (shared)
-│   ├── viewer2d.js              # 2D SVG viewer — loads SVG, wires recoloring
-│   ├── pdf.js                   # PDF blueprint export (decoupled from viewer)
-│   └── styles.css               # App styles
+│   ├── main.js                 # Entry point — wires palette, parts, state, viewer, UI
+│   ├── viewer2d.js             # 2D SVG viewer — loads SVG, wires click + live recoloring
+│   │                           #   Supports linked parts: multiple SVG elements can share
+│   │                           #   the same data-part value to recolor as one logical unit
+│   ├── state.js                # Config state + URL encode/decode (shared across phases)
+│   ├── parts.js                # Loads data/parts.json
+│   ├── palette.js              # Loads data/bambu-pla-colors.json
+│   ├── pdf.js                  # PDF blueprint export via jsPDF (decoupled from viewer)
+│   └── styles.css              # App styles
 ├── data/
-│   ├── bambu-pla-colors.json    # Bambu Lab PLA filament palette
-│   └── parts.json               # Colorable parts definitions
+│   ├── parts.json              # 16 colorable parts (see schema below)
+│   └── bambu-pla-colors.json  # ~126 Bambu Lab PLA colors (see below)
 ├── assets/
-│   └── machine-front.svg        # Placeholder layered SVG (replace with real art)
-├── scripts/
-│   └── (optional Python scraper — see below)
-└── README.md
+│   └── machine-front.svg       # Layered SVG — one element per colorable region
+└── scripts/
+    └── fetch_bambu_pla.py      # Optional color dataset updater (see below)
 ```
-
----
-
-## How to Replace the Placeholder SVG
-
-The placeholder `assets/machine-front.svg` is a stylized stand-in for the real machine art. To swap in your real layered SVG:
-
-### Convention
-
-Every colorable region in your SVG **must** have:
-- `id="part-<partId>"` — where `<partId>` matches an `"id"` entry in `data/parts.json`
-- `data-part="<partId>"` — same value, used by `viewer2d.js` for event wiring
-
-Example:
-```xml
-<path id="part-lid" data-part="lid" fill="#00AE42" d="…" />
-<g    id="part-top-chamber" data-part="top-chamber">…</g>
-```
-
-### Steps
-
-1. Create your layered SVG (e.g. in Inkscape or Illustrator — one layer per colorable part).
-2. Name each part's element/group with the `id` and `data-part` convention above.
-3. Replace `assets/machine-front.svg` with your file.
-4. Update `data/parts.json` if your parts differ from the placeholder set.
-5. No code changes needed — `viewer2d.js` discovers parts via `[data-part]` selectors.
 
 ---
 
@@ -79,107 +61,117 @@ Example:
 
 ### `data/parts.json`
 
-Array of colorable part definitions:
+Array of 16 part objects:
 
 ```json
-[
-  { "id": "lid",   "label": "Lid",   "defaultColorId": "bambu-green" },
-  …
-]
+{
+  "id": "window",
+  "label": "Window",
+  "qty": 2,
+  "defaultColorId": "basic-pla-cyan",
+  "svgIds": ["part-window"]
+}
 ```
 
-| Field           | Description                                    |
-|-----------------|------------------------------------------------|
-| `id`            | Must match `data-part` in the SVG              |
-| `label`         | Human-readable name shown in the parts sidebar |
-| `defaultColorId`| Initial color (must match a color `id`)         |
+| Field | Description |
+|---|---|
+| `id` | Logical part identifier (used as the state key) |
+| `label` | Human-readable name shown in the sidebar and PDF legend |
+| `qty` | Print quantity — `Window` is 2; all other parts are 1 |
+| `defaultColorId` | Starting color — **must** be a valid `id` from `bambu-pla-colors.json` |
+| `svgIds` | Array of SVG element ids (`id="part-<x>"`) driven by this part |
 
-Parts were extracted from the included reference PDF (`Gacha Machine Color Picker Reference.pdf`):
-`lid`, `lid-lock`, `top-chamber`, `window`, `hole-blocker`, `mid-plate`, `main-gear`,
-`coin-mech-back-plate`, `coin-mech-front-plate`, `coin-mech-gear`, `knob`, `mouth`,
-`bottom-chamber`, `rear-lock-knob`, `bottom-plate`, `back-cover`.
+**Linked parts — Bottom Plate / Mouth:**  
+`bottom-plate-mouth` is a single logical part whose `svgIds` contains two elements — `part-bottom-plate` and `part-mouth`. Both SVG elements carry `data-part="bottom-plate-mouth"`, so selecting this part and choosing a color recolors *both* regions together in one action.
+
+**Separate part — Bottom Chamber:**  
+`bottom-chamber` is its own independent part (`data-part="bottom-chamber"`). It is **not** linked to Bottom Plate / Mouth and recolors independently.
+
+**Window qty 2:**  
+Window has `qty: 2` because two identical pieces are printed. The PDF legend renders it as `Window (×2)`.
 
 ### `data/bambu-pla-colors.json`
 
-Array of Bambu Lab PLA filament colors:
+Source: <https://3dfilamentprofiles.com/filaments/bambu-lab/pla>
+
+~126 Bambu Lab PLA colors across 12 series:
+
+| Series | Examples |
+|---|---|
+| Basic PLA | Jade White, Black, Cyan, Cobalt Blue, Bambu Green, Gold, Red … |
+| PLA Matte | Ivory White, Marine Blue, Grass Green … |
+| PLA Silk | White, Gold, Rose Gold, Baby Blue … |
+| PLA Basic Gradient | Blueberry Bubblegum, Sakura … |
+| PLA CF | Matcha Green, Jeans Blue, Royal Blue … |
+| PLA Sparkle | Classic Gold, Alpine Green … |
+| PLA Wood | White Oak … |
+| PLA Translucent | Ice Blue, Blue, Light Jade … |
+| PLA Glow | Glow Green, Glow Blue … |
+| PLA Metal | Cobalt Blue Metallic, Oxide Green Metallic, Iridium Gold Metallic … |
+| PLA Galaxy | Green … |
+| PLA Marble | White Marble … |
+
+JSON schema per entry:
 
 ```json
-[
-  { "id": "bambu-green", "name": "Bambu Green", "hex": "#00AE42", "series": "Basic PLA", "url": "…" },
-  …
-]
+{
+  "id": "basic-pla-cyan",
+  "name": "Cyan",
+  "hex": "#0086D6",
+  "series": "Basic PLA",
+  "finish": "basic",
+  "url": "https://store.bambulab.com/products/pla-basic-filament"
+}
 ```
 
-To add more colors (e.g. Matte PLA, Silk PLA), append entries with a unique `id`.
+Multi-color filaments (gradients, dual-silk) may include optional fields:
+- `hexes`: array of hex strings for the component colors
+- `notes`: human-readable description
 
 ---
 
-## Architecture
+## SVG Replacement Convention
 
-### Module Map
+To swap in the real layered SVG artwork, give every colorable region:
 
-```
-main.js
-  ├─ palette.js    ← loads bambu-pla-colors.json
-  ├─ parts.js      ← loads parts.json
-  ├─ state.js      ← selections { partId: colorId }, URL encode/decode
-  ├─ viewer2d.js   ← fetches machine-front.svg, wires clicks → state
-  └─ pdf.js        ← jsPDF blueprint (preview image + legend table)
+```svg
+<path id="part-<id>" data-part="<partId>" fill="<defaultFill>" … />
 ```
 
-### Shared Modules (Phase 1 → Phase 2 → Phase 3)
+- `id` must be unique in the document (e.g. `part-lid`, `part-window`).
+- `data-part` must match the logical `id` in `parts.json`.
+- For linked parts, both elements share the same `data-part` value:
+  ```svg
+  <rect id="part-bottom-plate" data-part="bottom-plate-mouth" … />
+  <rect id="part-mouth"        data-part="bottom-plate-mouth" … />
+  ```
+- No code changes needed — `viewer2d.js` detects all recolorable elements via `[data-part]`.
 
-`state.js`, `palette.js`, `parts.js`, and `pdf.js` are **viewer-agnostic**.  
-When Phase 2 (Three.js) is added, only `viewer2d.js` is replaced with `viewer3d.js`.  
-When Phase 3 (ordering) is added, `state.js`'s `getSelections()` output is POSTed directly to the order endpoint.
+---
 
-### URL State
+## Scraper — Updating the Color Dataset
 
-The current color configuration is encoded into the URL query string as `?c=partId:colorId,…`.  
-Sharing the URL restores the exact configuration in any browser.
+`scripts/fetch_bambu_pla.py` scrapes `3dfilamentprofiles.com` and rewrites `data/bambu-pla-colors.json`. It is **not** required for the frontend — the JSON is checked in.
+
+```bash
+pip install requests beautifulsoup4
+python scripts/fetch_bambu_pla.py              # overwrites data/bambu-pla-colors.json
+python scripts/fetch_bambu_pla.py --dry-run    # print JSON to stdout only
+python scripts/fetch_bambu_pla.py --out path/to/output.json
+```
 
 ---
 
 ## Roadmap
 
-| Phase | Description                                                      | Status      |
-|-------|------------------------------------------------------------------|-------------|
-| **1** | 2D orthographic viewer (this PR) — layered SVG + Bambu palette + PDF export | ✅ Done |
-| **2** | Three.js 3D viewer — load GLB with named meshes, reuse state/palette/pdf | 🗓 Planned |
-| **3** | Order integration — POST config to lightningbugclub.com checkout | 🗓 Planned |
-
-### Phase 2 Notes (Three.js)
-
-1. Export the machine model to GLB with each colorable part as a **named mesh** (same `id` convention as SVG parts).
-2. Create `src/viewer3d.js` — load GLB via `THREE.GLTFLoader`, assign `MeshStandardMaterial` per mesh, wire color changes from state.
-3. Capture preview: `renderer.domElement.toDataURL('image/png')` → pass to `pdf.js` unchanged.
-4. Replace the `viewer2d` import in `main.js` with `viewer3d`.
-
-### Phase 3 Notes (Order Integration)
-
-`state.getSelections()` returns `{ partId: colorId }` — this is the order payload.  
-Add a "Submit Order" button that POSTs this object (plus customer info) to the shop's API.
-
----
-
-## PDF Export
-
-The "Export PDF" button generates a **build blueprint** containing:
-- Machine preview image (rasterized SVG)
-- Table: Part label | Bambu color name | Hex value | Product URL
-
-Powered by [jsPDF](https://github.com/parallax/jsPDF) (loaded via CDN).
-
----
-
-## Scripts (Optional)
-
-A Python scraper can be added under `scripts/update-colors.py` to refresh `data/bambu-pla-colors.json` from [3dfilamentprofiles.com](https://3dfilamentprofiles.com/filaments/bambu-lab/pla).  
-The frontend is **not** dependent on this script — the JSON file is committed and served statically.
+| Phase | Description | Status |
+|---|---|---|
+| **1 — 2D (current)** | 2D SVG customizer, Bambu PLA palette, PDF export | ✅ In progress |
+| **2 — 3D** | Three.js viewer reusing `state.js` / `palette.js` / `pdf.js`; replace `viewer2d.js` with `viewer3d.js` | Planned |
+| **3 — Order integration** | Submit build configuration to lightningbugclub.com | Planned |
 
 ---
 
 ## License
 
-See repository for license details.  
-Machine design © Lightning Bug Club.
+© Lightning Bug Club. All rights reserved.

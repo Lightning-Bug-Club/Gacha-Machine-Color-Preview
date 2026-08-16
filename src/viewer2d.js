@@ -4,6 +4,11 @@
  * Phase 1: 2D orthographic viewer.
  * Phase 2: Replace this file with viewer3d.js (Three.js). All other modules
  *          (state, palette, parts, pdf) remain unchanged.
+ *
+ * LINKED PARTS: Multiple SVG elements can share the same data-part value to
+ * create a single logical part that recolors as one unit. For example, both
+ * id="part-bottom-plate" and id="part-mouth" carry data-part="bottom-plate-mouth",
+ * so selecting that logical part recolors both elements together.
  */
 
 import { subscribe, setSelectedPart, getState } from './state.js';
@@ -113,11 +118,14 @@ function _resolveHex(colorId) {
 
 /**
  * Recolor a specific part directly by hex (used internally and for testing).
+ * Handles linked parts — all SVG elements sharing the same data-part value
+ * are recolored together.
  */
 export function recolorPart(partId, hex) {
   if (!_svgRoot) return;
-  const el = _svgRoot.querySelector(`[data-part="${partId}"]`);
-  if (el) el.setAttribute('fill', hex);
+  _svgRoot.querySelectorAll(`[data-part="${partId}"]`).forEach(el => {
+    el.setAttribute('fill', hex);
+  });
 }
 
 /**
