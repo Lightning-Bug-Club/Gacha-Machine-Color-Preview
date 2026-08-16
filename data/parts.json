@@ -1,18 +1,114 @@
 [
-  { "id": "lid",                    "label": "Lid",                    "defaultColorId": "bambu-green" },
-  { "id": "lid-lock",               "label": "Lid Lock",               "defaultColorId": "dark-gray" },
-  { "id": "top-chamber",            "label": "Top Chamber",            "defaultColorId": "cobalt-blue" },
-  { "id": "window",                 "label": "Window",                 "defaultColorId": "cyan" },
-  { "id": "hole-blocker",           "label": "Hole Blocker",           "defaultColorId": "jade-white" },
-  { "id": "mid-plate",              "label": "Mid-Plate",              "defaultColorId": "dark-gray" },
-  { "id": "main-gear",              "label": "Main Gear",              "defaultColorId": "gray" },
-  { "id": "coin-mech-back-plate",   "label": "Coin Mech. Back Plate",  "defaultColorId": "dark-gray" },
-  { "id": "coin-mech-front-plate",  "label": "Coin Mech. Front Plate", "defaultColorId": "cobalt-blue" },
-  { "id": "coin-mech-gear",         "label": "Coin Mech. Gear",        "defaultColorId": "gray" },
-  { "id": "knob",                   "label": "Knob",                   "defaultColorId": "red" },
-  { "id": "mouth",                  "label": "Mouth",                  "defaultColorId": "dark-gray" },
-  { "id": "bottom-chamber",         "label": "Bottom Chamber",         "defaultColorId": "cobalt-blue" },
-  { "id": "rear-lock-knob",         "label": "Rear Lock Knob",         "defaultColorId": "red" },
-  { "id": "bottom-plate",           "label": "Bottom Plate",           "defaultColorId": "dark-gray" },
-  { "id": "back-cover",             "label": "Back Cover",             "defaultColorId": "dark-gray" }
+  {
+    "id": "lid",
+    "label": "Lid",
+    "qty": 1,
+    "defaultColorId": "basic-pla-bambu-green",
+    "svgIds": ["part-lid"]
+  },
+  {
+    "id": "top-chamber",
+    "label": "Top Chamber",
+    "qty": 1,
+    "defaultColorId": "basic-pla-cobalt-blue",
+    "svgIds": ["part-top-chamber"]
+  },
+  {
+    "id": "hole-blocker",
+    "label": "Hole Blocker",
+    "qty": 1,
+    "defaultColorId": "basic-pla-jade-white",
+    "svgIds": ["part-hole-blocker"]
+  },
+  {
+    "id": "mid-plate",
+    "label": "Mid-Plate",
+    "qty": 1,
+    "defaultColorId": "basic-pla-dark-gray",
+    "svgIds": ["part-mid-plate"]
+  },
+  {
+    "id": "main-gear",
+    "label": "Main Gear",
+    "qty": 1,
+    "defaultColorId": "basic-pla-gray",
+    "svgIds": ["part-main-gear"]
+  },
+  {
+    "id": "coin-mech-back-plate",
+    "label": "Coin Mech. Back Plate",
+    "qty": 1,
+    "defaultColorId": "basic-pla-dark-gray",
+    "svgIds": ["part-coin-mech-back-plate"]
+  },
+  {
+    "id": "coin-mech-front-plate",
+    "label": "Coin Mech. Front Plate",
+    "qty": 1,
+    "defaultColorId": "basic-pla-cobalt-blue",
+    "svgIds": ["part-coin-mech-front-plate"]
+  },
+  {
+    "id": "coin",
+    "label": "Coin",
+    "qty": 1,
+    "defaultColorId": "basic-pla-gold",
+    "svgIds": ["part-coin"]
+  },
+  {
+    "id": "knob",
+    "label": "Knob",
+    "qty": 1,
+    "defaultColorId": "basic-pla-red",
+    "svgIds": ["part-knob"]
+  },
+  {
+    "id": "coin-mech-gear",
+    "label": "Coin Mech Gear",
+    "qty": 1,
+    "defaultColorId": "basic-pla-gray",
+    "svgIds": ["part-coin-mech-gear"]
+  },
+  {
+    "id": "bottom-plate-mouth",
+    "label": "Bottom Plate / Mouth",
+    "qty": 1,
+    "defaultColorId": "basic-pla-dark-gray",
+    "svgIds": ["part-bottom-plate", "part-mouth"]
+  },
+  {
+    "id": "rear-lock-knob",
+    "label": "Rear Lock Knob",
+    "qty": 1,
+    "defaultColorId": "basic-pla-red",
+    "svgIds": ["part-rear-lock-knob"]
+  },
+  {
+    "id": "lid-lock",
+    "label": "Lid Lock",
+    "qty": 1,
+    "defaultColorId": "basic-pla-dark-gray",
+    "svgIds": ["part-lid-lock"]
+  },
+  {
+    "id": "window",
+    "label": "Window",
+    "qty": 2,
+    "defaultColorId": "basic-pla-cyan",
+    "svgIds": ["part-window"]
+  },
+  {
+    "id": "back-cover",
+    "label": "Back Cover",
+    "qty": 1,
+    "defaultColorId": "basic-pla-dark-gray",
+    "svgIds": ["part-back-cover"]
+  },
+  {
+    "id": "bottom-chamber",
+    "label": "Bottom Chamber",
+    "qty": 1,
+    "defaultColorId": "basic-pla-cobalt-blue",
+    "svgIds": ["part-bottom-chamber"]
+  }
 ]

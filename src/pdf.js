@@ -110,7 +110,8 @@ export async function exportPDF({ previewDataURL, selections, parts, colors }) {
     doc.setDrawColor(0);
 
     doc.setFontSize(8);
-    doc.text(part.label,  COL_PART  + 1, yPos + 5.5);
+    const partLabel = part.qty && part.qty > 1 ? `${part.label} (×${part.qty})` : part.label;
+    doc.text(partLabel,  COL_PART  + 1, yPos + 5.5);
     doc.text(color.name,  COL_COLOR + 1, yPos + 5.5);
     doc.text(color.hex,   COL_HEX   + 1, yPos + 5.5);
 
