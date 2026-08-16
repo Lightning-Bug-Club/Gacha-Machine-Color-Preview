@@ -22,12 +22,26 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const MODEL_URL = 'models/gacha-machine.glb';
 const HDRI_URL  = 'hdri/environment.hdr';
 
-/** Canonical part names and their default hex colors. */
+/**
+ * Canonical part IDs and their default hex colors.
+ * Order matches data/parts.json; "bottom-plate-mouth" is a single unified part.
+ */
 const PART_DEFAULTS = {
-  Body:   '#e63946', // Red
-  Door:   '#457b9d', // Steel blue
-  Trim:   '#1d3557', // Dark navy
-  Accent: '#f1c40f', // Yellow
+  'lid':                   '#e63946',
+  'top-chamber':           '#457b9d',
+  'hole-blocker':          '#1d3557',
+  'mid-plate':             '#f1c40f',
+  'main-gear':             '#2ecc71',
+  'coin-mech-back-plate':  '#e67e22',
+  'coin-mech-front-plate': '#9b59b6',
+  'coin':                  '#f1c40f',
+  'knob':                  '#e63946',
+  'coin-mech-gear':        '#2c3e50',
+  'bottom-plate-mouth':    '#457b9d',
+  'rear-lock-knob':        '#1d3557',
+  'lid-lock':              '#e67e22',
+  'window':                '#b0c4de',
+  'back-cover':            '#2c3e50',
 };
 
 /** PBR values per finish preset. */
