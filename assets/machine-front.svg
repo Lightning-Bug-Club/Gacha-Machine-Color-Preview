@@ -1,0 +1,133 @@
+<!--
+  machine-front.svg — Placeholder front-orthographic view of the Gata-Gata Gacha Machine.
+
+  CONVENTION FOR REPLACEMENT:
+  Each colorable part uses:
+    id="part-<svgId>"        (unique SVG element identifier)
+    data-part="<partId>"     (logical part id matching data/parts.json)
+
+  One logical part can span multiple SVG elements — both share the same
+  data-part value. Example: bottom-plate-mouth drives BOTH part-bottom-plate
+  and part-mouth together (data-part="bottom-plate-mouth" on each element).
+
+  Parts and their data-part values (16 total):
+    lid               → part-lid
+    top-chamber       → part-top-chamber
+    hole-blocker      → part-hole-blocker
+    mid-plate         → part-mid-plate
+    main-gear         → part-main-gear
+    coin-mech-back-plate  → part-coin-mech-back-plate
+    coin-mech-front-plate → part-coin-mech-front-plate
+    coin              → part-coin
+    knob              → part-knob
+    coin-mech-gear    → part-coin-mech-gear
+    bottom-plate-mouth → part-bottom-plate + part-mouth (LINKED — same data-part)
+    rear-lock-knob    → part-rear-lock-knob
+    lid-lock          → part-lid-lock
+    window            → part-window  (qty 2 — one SVG element represents both)
+    back-cover        → part-back-cover
+    bottom-chamber    → part-bottom-chamber (SEPARATE from bottom-plate-mouth)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 540" width="300" height="540">
+
+  <!-- ═══════════════════════ BACK COVER ════════════════════════════════ -->
+  <!-- Rear structural panel (shown offset for visibility) -->
+  <rect id="part-back-cover" data-part="back-cover"
+        x="26" y="60" width="248" height="410" rx="8"
+        fill="#545454" stroke="#111" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ BOTTOM PLATE (part of Bottom Plate / Mouth) ══ -->
+  <!-- Structural base plate — shares color with Mouth (linked part) -->
+  <rect id="part-bottom-plate" data-part="bottom-plate-mouth"
+        x="30" y="480" width="240" height="28" rx="4"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ BOTTOM CHAMBER ════════════════════════════ -->
+  <!-- Lower housing — independently colored, separate from Bottom Plate/Mouth -->
+  <rect id="part-bottom-chamber" data-part="bottom-chamber"
+        x="38" y="340" width="224" height="144" rx="6"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ COIN MECH. BACK PLATE ═════════════════════ -->
+  <rect id="part-coin-mech-back-plate" data-part="coin-mech-back-plate"
+        x="48" y="350" width="82" height="124" rx="3"
+        fill="#545454" stroke="#222" stroke-width="1"/>
+
+  <!-- ═══════════════════════ COIN MECH. FRONT PLATE ════════════════════ -->
+  <rect id="part-coin-mech-front-plate" data-part="coin-mech-front-plate"
+        x="54" y="356" width="70" height="112" rx="3"
+        fill="#0056B8" stroke="#222" stroke-width="1"/>
+
+  <!-- ═══════════════════════ COIN MECH GEAR ════════════════════════════ -->
+  <circle id="part-coin-mech-gear" data-part="coin-mech-gear"
+          cx="88" cy="408" r="26"
+          fill="#8E9089" stroke="#222" stroke-width="1"/>
+  <circle cx="88" cy="408" r="20" fill="none" stroke="#545454" stroke-width="2" stroke-dasharray="6 4"/>
+
+  <!-- ═══════════════════════ COIN ══════════════════════════════════════ -->
+  <!-- Token / 100-yen coin -->
+  <circle id="part-coin" data-part="coin"
+          cx="88" cy="408" r="11"
+          fill="#E4BD68" stroke="#B8942A" stroke-width="1"/>
+
+  <!-- ═══════════════════════ KNOB ══════════════════════════════════════ -->
+  <!-- Coin crank knob -->
+  <circle id="part-knob" data-part="knob"
+          cx="88" cy="444" r="14"
+          fill="#C12E1F" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ MOUTH (part of Bottom Plate / Mouth) ══════ -->
+  <!-- Output tray slot — shares color with Bottom Plate (linked part) -->
+  <rect id="part-mouth" data-part="bottom-plate-mouth"
+        x="105" y="440" width="128" height="28" rx="9"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+  <!-- slot opening (decorative, not a separate part) -->
+  <rect x="115" y="447" width="108" height="10" rx="5" fill="#111"/>
+
+  <!-- ═══════════════════════ REAR LOCK KNOB ════════════════════════════ -->
+  <circle id="part-rear-lock-knob" data-part="rear-lock-knob"
+          cx="265" cy="400" r="12"
+          fill="#C12E1F" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ MID-PLATE ═════════════════════════════════ -->
+  <rect id="part-mid-plate" data-part="mid-plate"
+        x="33" y="326" width="234" height="18" rx="3"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ HOLE BLOCKER ══════════════════════════════ -->
+  <rect id="part-hole-blocker" data-part="hole-blocker"
+        x="92" y="296" width="116" height="30" rx="5"
+        fill="#FFFFFF" stroke="#AAAAAA" stroke-width="1"/>
+
+  <!-- ═══════════════════════ MAIN GEAR ═════════════════════════════════ -->
+  <circle id="part-main-gear" data-part="main-gear"
+          cx="150" cy="258" r="38"
+          fill="#8E9089" stroke="#222" stroke-width="1.5"/>
+  <circle cx="150" cy="258" r="30" fill="none" stroke="#545454" stroke-width="2" stroke-dasharray="8 5"/>
+  <circle cx="150" cy="258" r="10" fill="#545454"/>
+
+  <!-- ═══════════════════════ TOP CHAMBER ═══════════════════════════════ -->
+  <!-- Main transparent capsule housing -->
+  <rect id="part-top-chamber" data-part="top-chamber"
+        x="36" y="80" width="228" height="250" rx="10"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ WINDOW ════════════════════════════════════ -->
+  <!-- Translucent viewing window (qty 2 — front and rear) -->
+  <rect id="part-window" data-part="window"
+        x="50" y="92" width="200" height="220" rx="8"
+        fill="#0086D6" stroke="#0056B8" stroke-width="1" opacity="0.55"/>
+
+  <!-- ═══════════════════════ LID LOCK ══════════════════════════════════ -->
+  <rect id="part-lid-lock" data-part="lid-lock"
+        x="120" y="60" width="60" height="26" rx="4"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+
+  <!-- ═══════════════════════ LID ═══════════════════════════════════════ -->
+  <rect id="part-lid" data-part="lid"
+        x="36" y="28" width="228" height="48" rx="8"
+        fill="#00AE42" stroke="#222" stroke-width="1.5"/>
+  <!-- lid hinge line -->
+  <line x1="36" y1="52" x2="264" y2="52" stroke="#1a7a32" stroke-width="1" opacity="0.5"/>
+
+</svg>

@@ -1,226 +1,177 @@
-# Gacha Machine Color Configurator
+# Gata-Gata Gacha Machine — Color Customizer
 
-An interactive **3D color configurator** you can embed on any website. Pick colours for each part of your Gacha Machine vending machine, switch between matte / gloss / metallic finishes, and download a screenshot — all in the browser, with no server required.
+A car-configurator-style **2D SVG color customizer** for the [Gata-Gata gachapon vending machine](https://www.lightningbugclub.com/product/gatagata-gacha-machine-100-3d-printable/W4J4ZBI4S6XYEYQWZHEMS6OJ) by Lightning Bug Club.
 
----
-
-## Table of Contents
-
-1. [Project overview](#project-overview)
-2. [Prerequisites](#prerequisites)
-3. [Folder structure](#folder-structure)
-4. [STL → GLB conversion with `convert.py`](#stl--glb-conversion)
-5. [Naming mesh parts in Blender](#naming-mesh-parts-in-blender)
-6. [Adding an HDRI for better lighting](#adding-an-hdri-for-better-lighting)
-7. [Running locally](#running-locally)
-8. [Embedding in your website](#embedding-in-your-website)
-9. [Customising colour presets and parts](#customising-colour-presets-and-parts)
+Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from the comprehensive palette, see the SVG recolor live, and export a build-blueprint PDF listing every part with its chosen filament color and product URL.
 
 ---
 
-## Project overview
+## Quick Start
 
-| Feature | Detail |
+No build step required. Serve with any static file server (ES modules require a server — `file://` will not work):
+
+```bash
+# Python (built in)
+python3 -m http.server 8080
+
+# Node
+npx serve .
+```
+
+Then open `http://localhost:8080` in your browser.
+
+---
+
+## How It Works
+
+1. **Select a part** from the sidebar (or click directly on the SVG).
+2. **Choose a color** from the palette grid — the SVG recolors live.
+3. **Export PDF** to download a build blueprint with a color legend.
+
+The current URL is updated with a `?c=` parameter encoding all selections so builds can be bookmarked and shared.
+
+---
+
+## Module Map
+
+```
+├── index.html                  # App shell — loads src/main.js as an ES module
+├── src/
+│   ├── main.js                 # Entry point — wires palette, parts, state, viewer, UI
+│   ├── viewer2d.js             # 2D SVG viewer — loads SVG, wires click + live recoloring
+│   │                           #   Supports linked parts: multiple SVG elements can share
+│   │                           #   the same data-part value to recolor as one logical unit
+│   ├── state.js                # Config state + URL encode/decode (shared across phases)
+│   ├── parts.js                # Loads data/parts.json
+│   ├── palette.js              # Loads data/bambu-pla-colors.json
+│   ├── pdf.js                  # PDF blueprint export via jsPDF (decoupled from viewer)
+│   └── styles.css              # App styles
+├── data/
+│   ├── parts.json              # 16 colorable parts (see schema below)
+│   └── bambu-pla-colors.json  # ~126 Bambu Lab PLA colors (see below)
+├── assets/
+│   └── machine-front.svg       # Layered SVG — one element per colorable region
+└── scripts/
+    └── fetch_bambu_pla.py      # Optional color dataset updater (see below)
+```
+
+---
+
+## Data Files
+
+### `data/parts.json`
+
+Array of 16 part objects:
+
+```json
+{
+  "id": "window",
+  "label": "Window",
+  "qty": 2,
+  "defaultColorId": "basic-pla-cyan",
+  "svgIds": ["part-window"]
+}
+```
+
+| Field | Description |
 |---|---|
-| 3D engine | [three.js](https://threejs.org/) r160+ via CDN |
-| Format | GLB / glTF for web delivery |
-| Materials | PBR `MeshStandardMaterial` |
-| Lighting | HDRI environment map (with procedural fallback) |
-| Controls | Orbit / zoom / pan via `OrbitControls` |
-| No build step | Just open `index.html` in a browser |
+| `id` | Logical part identifier (used as the state key) |
+| `label` | Human-readable name shown in the sidebar and PDF legend |
+| `qty` | Print quantity — `Window` is 2; all other parts are 1 |
+| `defaultColorId` | Starting color — **must** be a valid `id` from `bambu-pla-colors.json` |
+| `svgIds` | Array of SVG element ids (`id="part-<x>"`) driven by this part |
+
+**Linked parts — Bottom Plate / Mouth:**  
+`bottom-plate-mouth` is a single logical part whose `svgIds` contains two elements — `part-bottom-plate` and `part-mouth`. Both SVG elements carry `data-part="bottom-plate-mouth"`, so selecting this part and choosing a color recolors *both* regions together in one action.
+
+**Separate part — Bottom Chamber:**  
+`bottom-chamber` is its own independent part (`data-part="bottom-chamber"`). It is **not** linked to Bottom Plate / Mouth and recolors independently.
+
+**Window qty 2:**  
+Window has `qty: 2` because two identical pieces are printed. The PDF legend renders it as `Window (×2)`.
+
+### `data/bambu-pla-colors.json`
+
+Source: <https://3dfilamentprofiles.com/filaments/bambu-lab/pla>
+
+~126 Bambu Lab PLA colors across 12 series:
+
+| Series | Examples |
+|---|---|
+| Basic PLA | Jade White, Black, Cyan, Cobalt Blue, Bambu Green, Gold, Red … |
+| PLA Matte | Ivory White, Marine Blue, Grass Green … |
+| PLA Silk | White, Gold, Rose Gold, Baby Blue … |
+| PLA Basic Gradient | Blueberry Bubblegum, Sakura … |
+| PLA CF | Matcha Green, Jeans Blue, Royal Blue … |
+| PLA Sparkle | Classic Gold, Alpine Green … |
+| PLA Wood | White Oak … |
+| PLA Translucent | Ice Blue, Blue, Light Jade … |
+| PLA Glow | Glow Green, Glow Blue … |
+| PLA Metal | Cobalt Blue Metallic, Oxide Green Metallic, Iridium Gold Metallic … |
+| PLA Galaxy | Green … |
+| PLA Marble | White Marble … |
+
+JSON schema per entry:
+
+```json
+{
+  "id": "basic-pla-cyan",
+  "name": "Cyan",
+  "hex": "#0086D6",
+  "series": "Basic PLA",
+  "finish": "basic",
+  "url": "https://store.bambulab.com/products/pla-basic-filament"
+}
+```
+
+Multi-color filaments (gradients, dual-silk) may include optional fields:
+- `hexes`: array of hex strings for the component colors
+- `notes`: human-readable description
 
 ---
 
-## Prerequisites
+## SVG Replacement Convention
 
-* **Python 3.8+** — only needed for the STL → GLB conversion step
-* **A modern browser** — Chrome, Firefox, Edge, Safari (ES modules required)
-* Internet connection on first load (three.js is fetched from the CDN)
+To swap in the real layered SVG artwork, give every colorable region:
+
+```svg
+<path id="part-<id>" data-part="<partId>" fill="<defaultFill>" … />
+```
+
+- `id` must be unique in the document (e.g. `part-lid`, `part-window`).
+- `data-part` must match the logical `id` in `parts.json`.
+- For linked parts, both elements share the same `data-part` value:
+  ```svg
+  <rect id="part-bottom-plate" data-part="bottom-plate-mouth" … />
+  <rect id="part-mouth"        data-part="bottom-plate-mouth" … />
+  ```
+- No code changes needed — `viewer2d.js` detects all recolorable elements via `[data-part]`.
 
 ---
 
-## Folder structure
+## Scraper — Updating the Color Dataset
 
-```
-/
-├── index.html          ← main embeddable viewer page
-├── viewer.js           ← three.js scene, loader, color logic
-├── style.css           ← dark-themed responsive UI
-├── convert.py          ← Python STL → GLB pipeline
-├── requirements.txt    ← Python dependencies
-├── models/
-│   └── gacha-machine.glb   ← drop your exported GLB here
-└── hdri/
-    └── environment.hdr     ← optional HDRI lighting file
+`scripts/fetch_bambu_pla.py` scrapes `3dfilamentprofiles.com` and rewrites `data/bambu-pla-colors.json`. It is **not** required for the frontend — the JSON is checked in.
+
+```bash
+pip install requests beautifulsoup4
+python scripts/fetch_bambu_pla.py              # overwrites data/bambu-pla-colors.json
+python scripts/fetch_bambu_pla.py --dry-run    # print JSON to stdout only
+python scripts/fetch_bambu_pla.py --out path/to/output.json
 ```
 
 ---
 
-## STL → GLB conversion
+## Roadmap
 
-### 1. Install Python dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Convert a single STL file
-
-```bash
-python convert.py path/to/your-machine.stl
-# Output: models/your-machine.glb
-```
-
-### 3. Specify the output path
-
-```bash
-python convert.py path/to/your-machine.stl --output models/gacha-machine.glb
-```
-
-### 4. Convert all STLs in a directory
-
-```bash
-python convert.py --dir ./stl_files
-```
-
-### 5. Reduce polygon count for web performance
-
-The `--decimate` flag accepts a ratio between 0 and 1, where `0.5` keeps 50% of the original faces.
-
-```bash
-python convert.py input.stl --decimate 0.5
-python convert.py --dir ./stl_files --decimate 0.3 --models-dir models
-```
-
-The script prints a summary table:
-
-```
-====================================================================
-  Conversion Summary (1 file(s))
-====================================================================
-  IN  : input.stl
-  OUT : models/gacha-machine.glb  [312.4 KB]  (↓ 50.0% faces)
-        Verts 48,220 → 24,110   Faces 96,440 → 48,220
-====================================================================
-```
-
-> **Tip:** Aim for 20k–50k faces for smooth real-time rendering in a browser.
-
----
-
-## Naming mesh parts in Blender
-
-The viewer looks for mesh names that **start with** one of four part names (case-insensitive):
-
-| Part key | What it controls | Example Blender names |
+| Phase | Description | Status |
 |---|---|---|
-| `Body` | Main cabinet body | `Body`, `Body_001`, `body_main` |
-| `Door` | Front panel / door | `Door`, `Door_glass`, `door_panel` |
-| `Trim` | Frame, border strips | `Trim`, `Trim_top`, `trim_edge` |
-| `Accent` | Buttons, decals, details | `Accent`, `Accent_coin_slot` |
-
-**Steps in Blender:**
-
-1. Import your STL (`File → Import → STL`).
-2. In the *Outliner*, rename each object to match the table above.
-3. Export: `File → Export → glTF 2.0`.
-   * Format: **GLB** (binary)
-   * Include: ✅ Mesh, ✅ Materials
-4. Drop the `.glb` into the `models/` directory, naming it `gacha-machine.glb`.
-
-Meshes that don't match any part name are still rendered; they just won't respond to the per-part colour pickers.
+| **1 — 2D (current)** | 2D SVG customizer, Bambu PLA palette, PDF export | ✅ In progress |
+| **2 — 3D** | Three.js viewer reusing `state.js` / `palette.js` / `pdf.js`; replace `viewer2d.js` with `viewer3d.js` | Planned |
+| **3 — Order integration** | Submit build configuration to lightningbugclub.com | Planned |
 
 ---
 
-## Adding an HDRI for better lighting
+## License
 
-1. Download a free HDR file from [Poly Haven](https://polyhaven.com/hdris) — a 1K or 2K resolution is plenty for a web preview.
-2. Rename it to `environment.hdr`.
-3. Place it in the `hdri/` directory.
-
-The viewer automatically detects and loads it on startup. If no HDRI is present it falls back to a procedural hemisphere + directional light setup.
-
----
-
-## Running locally
-
-### Option A — open directly in browser
-
-Double-click `index.html`.  
-> **Note:** Some browsers block local `fetch()` requests (CORS). If the model doesn't load, use Option B.
-
-### Option B — Python dev server (recommended)
-
-```bash
-python -m http.server 8080
-```
-
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
-
----
-
-## Embedding in your website
-
-### `<iframe>` embed (recommended)
-
-```html
-<iframe
-  src="https://your-site.com/gacha-configurator/index.html"
-  width="900"
-  height="600"
-  style="border:none; border-radius:12px;"
-  allow="fullscreen"
-  title="Gacha Machine Color Configurator"
-></iframe>
-```
-
-### Self-hosted page
-
-Copy the entire project folder to your web host and link directly to `index.html`.
-
----
-
-## Customising colour presets and parts
-
-### Change default colours
-
-In `viewer.js`, edit the `PART_DEFAULTS` object:
-
-```js
-const PART_DEFAULTS = {
-  Body:   '#e63946', // ← change to any hex colour
-  Door:   '#457b9d',
-  Trim:   '#1d3557',
-  Accent: '#f1c40f',
-};
-```
-
-### Add or rename parts
-
-1. Add an entry to `PART_DEFAULTS` in `viewer.js`.
-2. Add a matching colour picker row in `index.html` (copy an existing `.picker-row` block and update the `data-part` attribute).
-3. Name your Blender mesh objects with the new part key as a prefix.
-
-### Change preset swatches
-
-In `index.html` find the `id="preset-swatches"` section and add / remove `.swatch` `<button>` elements with `data-color` attributes:
-
-```html
-<button class="swatch" data-color="#ff6b6b" title="Coral" style="background:#ff6b6b"></button>
-```
-
-### Adjust finish presets
-
-In `viewer.js`, edit `FINISH_PRESETS`:
-
-```js
-const FINISH_PRESETS = {
-  matte:    { roughness: 0.9, metalness: 0.0 },
-  gloss:    { roughness: 0.1, metalness: 0.1 },
-  metallic: { roughness: 0.3, metalness: 0.9 },
-};
-```
-
----
-
-*Built with ❤️ using [three.js](https://threejs.org/)*
+© Lightning Bug Club. All rights reserved.
