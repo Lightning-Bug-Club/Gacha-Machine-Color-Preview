@@ -1,8 +1,9 @@
 /**
  * parts.js — loads the machine's colorable parts definitions.
  *
- * Each part: { id, label, defaultColorId }
- * The id must match the data-part attribute on the SVG elements.
+ * Each part: { id, label, qty, defaultColorId, svgIds }
+ * The id is the logical part id stored in state; svgIds maps that logical part
+ * to one or more concrete SVG element ids in the layered artwork.
  */
 
 let _parts = null;

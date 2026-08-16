@@ -7,6 +7,7 @@
  */
 
 import { subscribe, setSelectedPart, getState } from './state.js';
+import { getParts } from './parts.js';
 
 const SVG_PATH = './assets/machine-front.svg';
 
@@ -40,6 +41,10 @@ export async function initViewer(containerEl) {
   // Wire click events on every element that has data-part
   _svgRoot.querySelectorAll('[data-part]').forEach(el => {
     el.style.cursor = 'pointer';
+    if (!el.hasAttribute('data-original-stroke')) {
+      el.setAttribute('data-original-stroke', el.getAttribute('stroke') || '');
+      el.setAttribute('data-original-stroke-width', el.getAttribute('stroke-width') || '1');
+    }
     el.addEventListener('click', e => {
       e.stopPropagation();
       const partId = el.getAttribute('data-part');
@@ -63,31 +68,28 @@ export async function initViewer(containerEl) {
 function _applyState(state) {
   if (!_svgRoot) return;
 
+  getParts().forEach(part => {
+    const colorId = state.selections[part.id];
+    if (!colorId) return;
+
+    (part.svgIds || []).forEach(svgId => {
+      const el = _svgRoot.ownerDocument.getElementById(svgId);
+      if (el) el.setAttribute('fill', _resolveHex(colorId));
+    });
+  });
+
   _svgRoot.querySelectorAll('[data-part]').forEach(el => {
     const partId = el.getAttribute('data-part');
-
-    // Recolor
-    const colorId = state.selections[partId];
-    if (colorId) {
-      el.setAttribute('fill', _resolveHex(colorId));
-    }
-
-    // Selection highlight
     if (partId === state.selectedPartId) {
       el.setAttribute('stroke', '#FFD700');
       el.setAttribute('stroke-width', '3');
       el.setAttribute('filter', 'drop-shadow(0 0 6px rgba(255,215,0,0.8))');
     } else {
-      // Restore original stroke (remove inline override)
       el.removeAttribute('filter');
       const original = el.getAttribute('data-original-stroke');
       if (original !== null) {
         el.setAttribute('stroke', original);
         el.setAttribute('stroke-width', el.getAttribute('data-original-stroke-width') || '1');
-      } else {
-        // First time — save original stroke so we can restore it
-        el.setAttribute('data-original-stroke', el.getAttribute('stroke') || '');
-        el.setAttribute('data-original-stroke-width', el.getAttribute('stroke-width') || '1');
       }
     }
   });
@@ -116,8 +118,12 @@ function _resolveHex(colorId) {
  */
 export function recolorPart(partId, hex) {
   if (!_svgRoot) return;
-  const el = _svgRoot.querySelector(`[data-part="${partId}"]`);
-  if (el) el.setAttribute('fill', hex);
+  const part = getParts().find(entry => entry.id === partId);
+  if (!part) return;
+  part.svgIds.forEach(svgId => {
+    const el = _svgRoot.ownerDocument.getElementById(svgId);
+    if (el) el.setAttribute('fill', hex);
+  });
 }
 
 /**

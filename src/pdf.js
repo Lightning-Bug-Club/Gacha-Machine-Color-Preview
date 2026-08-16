@@ -21,7 +21,7 @@
  * @param {Object} opts
  * @param {string}   opts.previewDataURL  - Data URL of the recolored preview image
  * @param {Object}   opts.selections      - { partId: colorId }
- * @param {Array}    opts.parts           - Parts array [{ id, label, defaultColorId }]
+ * @param {Array}    opts.parts           - Parts array [{ id, label, qty, defaultColorId, svgIds }]
  * @param {Array}    opts.colors          - Colors array [{ id, name, hex, series, url }]
  */
 export async function exportPDF({ previewDataURL, selections, parts, colors }) {
@@ -110,7 +110,8 @@ export async function exportPDF({ previewDataURL, selections, parts, colors }) {
     doc.setDrawColor(0);
 
     doc.setFontSize(8);
-    doc.text(part.label,  COL_PART  + 1, yPos + 5.5);
+    const partLabel = part.qty > 1 ? `${part.label} (×${part.qty})` : part.label;
+    doc.text(partLabel, COL_PART + 1, yPos + 5.5);
     doc.text(color.name,  COL_COLOR + 1, yPos + 5.5);
     doc.text(color.hex,   COL_HEX   + 1, yPos + 5.5);
 

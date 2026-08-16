@@ -48,7 +48,7 @@ async function init() {
     const li = document.createElement('li');
     li.className = 'part-item';
     li.dataset.partId = part.id;
-    li.textContent = part.label;
+    li.textContent = part.qty > 1 ? `${part.label} (×${part.qty})` : part.label;
     li.addEventListener('click', () => setSelectedPart(part.id));
     partsList.appendChild(li);
   });

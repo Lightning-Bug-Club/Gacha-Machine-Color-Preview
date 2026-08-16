@@ -2,3 +2,6 @@ trimesh
 numpy
 pyglet
 scipy
+# Scraper dependencies (only needed for scripts/fetch_bambu_pla.py)
+requests>=2.28
+beautifulsoup4>=4.12
