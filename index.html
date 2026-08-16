@@ -8,7 +8,6 @@
 
   <!-- jsPDF via CDN (no bundler required for Phase 1) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-          integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
           crossorigin="anonymous"></script>
 </head>
 <body>
@@ -35,8 +34,24 @@
 
     <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
     <div id="viewer-wrap">
-      <div id="viewer">
-        <p style="color:#8892a4;font-size:0.9rem;">Loading machine preview…</p>
+      <div id="view-selector" role="tablist" aria-label="Machine view selector">
+        <button class="view-tab active" type="button" data-view="front" role="tab" aria-selected="true">
+          Front
+        </button>
+        <button class="view-tab" type="button" data-view="side" role="tab" aria-selected="false">
+          Side
+        </button>
+        <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">
+          Back
+        </button>
+        <button class="view-tab" type="button" data-view="iso" role="tab" aria-selected="false">
+          Isometric
+        </button>
+      </div>
+      <div id="viewer-stage">
+        <div id="viewer">
+          <p style="color:#8892a4;font-size:0.9rem;">Loading machine preview…</p>
+        </div>
       </div>
     </div>
 

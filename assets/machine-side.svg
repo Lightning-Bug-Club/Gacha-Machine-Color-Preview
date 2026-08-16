@@ -1,0 +1,76 @@
+<!-- Placeholder art for the right-side view. Replace with real production artwork later, keeping the same id/data-part convention. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 540" width="320" height="540">
+  <rect x="70" y="26" width="160" height="486" rx="18" fill="#0f1728" opacity="0.25"/>
+
+  <path id="part-back-cover" data-part="back-cover"
+        d="M92 78 L212 58 L232 352 L110 372 Z"
+        fill="#545454" stroke="#111" stroke-width="1.5"/>
+
+  <path id="part-bottom-plate" data-part="bottom-plate-mouth"
+        d="M88 470 L226 452 L232 486 L94 504 Z"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+
+  <path id="part-bottom-chamber" data-part="bottom-chamber"
+        d="M98 332 L224 318 L232 452 L102 466 Z"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <path id="part-coin-mech-back-plate" data-part="coin-mech-back-plate"
+        d="M136 344 L194 338 L200 438 L142 444 Z"
+        fill="#545454" stroke="#222" stroke-width="1.2"/>
+
+  <path id="part-coin-mech-front-plate" data-part="coin-mech-front-plate"
+        d="M142 350 L188 345 L193 430 L147 435 Z"
+        fill="#0056B8" stroke="#222" stroke-width="1.1"/>
+
+  <circle id="part-coin-mech-gear" data-part="coin-mech-gear"
+          cx="168" cy="388" r="28"
+          fill="#8E9089" stroke="#222" stroke-width="1.2"/>
+  <circle cx="168" cy="388" r="20" fill="none" stroke="#545454" stroke-width="2" stroke-dasharray="6 4"/>
+
+  <circle id="part-coin" data-part="coin"
+          cx="168" cy="388" r="10"
+          fill="#E4BD68" stroke="#B8942A" stroke-width="1"/>
+
+  <circle id="part-knob" data-part="knob"
+          cx="184" cy="430" r="13"
+          fill="#C12E1F" stroke="#222" stroke-width="1.3"/>
+
+  <path id="part-mouth" data-part="bottom-plate-mouth"
+        d="M116 418 L200 408 L204 434 L120 444 Z"
+        fill="#545454" stroke="#222" stroke-width="1.4"/>
+  <path d="M126 422 L194 414 L196 425 L128 433 Z" fill="#111"/>
+
+  <path id="part-rear-lock-knob" data-part="rear-lock-knob"
+        d="M232 394a12 12 0 1 1-24 0a12 12 0 1 1 24 0Z"
+        fill="#C12E1F" stroke="#222" stroke-width="1.2"/>
+
+  <path id="part-mid-plate" data-part="mid-plate"
+        d="M102 318 L226 304 L228 323 L104 337 Z"
+        fill="#545454" stroke="#222" stroke-width="1.3"/>
+
+  <path id="part-hole-blocker" data-part="hole-blocker"
+        d="M124 286 L194 278 L198 304 L128 312 Z"
+        fill="#FFFFFF" stroke="#AAA" stroke-width="1"/>
+
+  <circle id="part-main-gear" data-part="main-gear"
+          cx="166" cy="248" r="34"
+          fill="#8E9089" stroke="#222" stroke-width="1.4"/>
+  <circle cx="166" cy="248" r="25" fill="none" stroke="#545454" stroke-width="2" stroke-dasharray="8 5"/>
+  <circle cx="166" cy="248" r="10" fill="#545454"/>
+
+  <path id="part-top-chamber" data-part="top-chamber"
+        d="M98 86 L214 66 L228 302 L110 320 Z"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <path id="part-window" data-part="window"
+        d="M114 98 L204 82 L216 288 L124 302 Z"
+        fill="#0086D6" stroke="#0056B8" stroke-width="1" opacity="0.55"/>
+
+  <path id="part-lid-lock" data-part="lid-lock"
+        d="M140 48 L182 42 L186 66 L144 72 Z"
+        fill="#545454" stroke="#222" stroke-width="1.3"/>
+
+  <path id="part-lid" data-part="lid"
+        d="M92 38 L216 20 L224 70 L98 88 Z"
+        fill="#00AE42" stroke="#222" stroke-width="1.5"/>
+</svg>

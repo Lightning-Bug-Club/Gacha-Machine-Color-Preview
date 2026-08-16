@@ -2,7 +2,7 @@
 
 A car-configurator-style **2D SVG color customizer** for the [Gata-Gata gachapon vending machine](https://www.lightningbugclub.com/product/gatagata-gacha-machine-100-3d-printable/W4J4ZBI4S6XYEYQWZHEMS6OJ) by Lightning Bug Club.
 
-Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from the comprehensive palette, see the SVG recolor live, and export a build-blueprint PDF listing every part with its chosen filament color and product URL.
+Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from the comprehensive palette, see the SVG recolor live across four placeholder views, and export a build-blueprint PDF listing every part with its chosen filament color and product URL.
 
 ---
 
@@ -11,7 +11,10 @@ Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from
 No build step required. Serve with any static file server (ES modules require a server — `file://` will not work):
 
 ```bash
-# Python (built in)
+# Python
+python -m http.server 8080
+
+# Python 3
 python3 -m http.server 8080
 
 # Node
@@ -25,8 +28,9 @@ Then open `http://localhost:8080` in your browser.
 ## How It Works
 
 1. **Select a part** from the sidebar (or click directly on the SVG).
-2. **Choose a color** from the palette grid — the SVG recolors live.
-3. **Export PDF** to download a build blueprint with a color legend.
+2. **Switch views** with the Front / Side / Back / Isometric selector to compare angles.
+3. **Choose a color** from the grouped PLA palette — the active SVG recolors live.
+4. **Export PDF** to download a build blueprint with a color legend. The PDF uses the currently visible view when preview rasterization succeeds, and still exports the legend if the preview image cannot be rendered.
 
 The current URL is updated with a `?c=` parameter encoding all selections so builds can be bookmarked and shared.
 
@@ -38,7 +42,8 @@ The current URL is updated with a `?c=` parameter encoding all selections so bui
 ├── index.html                  # App shell — loads src/main.js as an ES module
 ├── src/
 │   ├── main.js                 # Entry point — wires palette, parts, state, viewer, UI
-│   ├── viewer2d.js             # 2D SVG viewer — loads SVG, wires click + live recoloring
+│   ├── viewer2d.js             # 2D SVG viewer — swaps Front/Side/Back/Iso SVGs,
+│   │                           #   wires click + live recoloring
 │   │                           #   Supports linked parts: multiple SVG elements can share
 │   │                           #   the same data-part value to recolor as one logical unit
 │   ├── state.js                # Config state + URL encode/decode (shared across phases)
@@ -50,7 +55,10 @@ The current URL is updated with a `?c=` parameter encoding all selections so bui
 │   ├── parts.json              # 16 colorable parts (see schema below)
 │   └── bambu-pla-colors.json  # ~126 Bambu Lab PLA colors (see below)
 ├── assets/
-│   └── machine-front.svg       # Layered SVG — one element per colorable region
+│   ├── machine-front.svg       # Layered front SVG placeholder
+│   ├── machine-side.svg        # Layered right-side SVG placeholder
+│   ├── machine-back.svg        # Layered back SVG placeholder
+│   └── machine-iso.svg         # Layered isometric SVG placeholder
 └── scripts/
     └── fetch_bambu_pla.py      # Optional color dataset updater (see below)
 ```
@@ -94,7 +102,7 @@ Window has `qty: 2` because two identical pieces are printed. The PDF legend ren
 
 Source: <https://3dfilamentprofiles.com/filaments/bambu-lab/pla>
 
-~126 Bambu Lab PLA colors across 12 series:
+~126 Bambu Lab PLA colors across 12 series. The UI groups swatches dynamically by each entry's `series` value so new series appear automatically:
 
 | Series | Examples |
 |---|---|
@@ -132,7 +140,7 @@ Multi-color filaments (gradients, dual-silk) may include optional fields:
 
 ## SVG Replacement Convention
 
-To swap in the real layered SVG artwork, give every colorable region:
+To swap in the real layered SVG artwork, give every colorable region in each view:
 
 ```svg
 <path id="part-<id>" data-part="<partId>" fill="<defaultFill>" … />
@@ -146,6 +154,7 @@ To swap in the real layered SVG artwork, give every colorable region:
   <rect id="part-mouth"        data-part="bottom-plate-mouth" … />
   ```
 - No code changes needed — `viewer2d.js` detects all recolorable elements via `[data-part]`.
+- The current repo ships with **placeholder** front / side / back / isometric art; production illustrations only need to preserve the same `id` / `data-part` mapping.
 
 ---
 
@@ -169,6 +178,19 @@ python scripts/fetch_bambu_pla.py --out path/to/output.json
 | **1 — 2D (current)** | 2D SVG customizer, Bambu PLA palette, PDF export | ✅ In progress |
 | **2 — 3D** | Three.js viewer reusing `state.js` / `palette.js` / `pdf.js`; replace `viewer2d.js` with `viewer3d.js` | Planned |
 | **3 — Order integration** | Submit build configuration to lightningbugclub.com | Planned |
+
+---
+
+## Removed Legacy 3D Files
+
+The abandoned Three.js prototype files have been removed from the root app layout so the repo reflects the current Phase 1 2D app:
+
+- `viewer.js`
+- `style.css`
+- `convert.py`
+- empty `models/` and `hdri/` directories
+
+The scraper, checked-in JSON data, reference documents, and SVG assets remain part of the supported workflow.
 
 ---
 

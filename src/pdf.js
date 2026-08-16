@@ -25,9 +25,12 @@
  * @param {Array}    opts.colors          - Colors array [{ id, name, hex, series, url }]
  */
 export async function exportPDF({ previewDataURL, selections, parts, colors }) {
-  // jsPDF is loaded globally via CDN
-  const { jsPDF } = window.jspdf;
-  if (!jsPDF) throw new Error('jsPDF is not loaded. Check the CDN script in index.html.');
+  // jsPDF is loaded globally via CDN; if it is missing, fail loudly so main.js
+  // can show a user-visible message instead of the export button failing silently.
+  const jsPDF = window.jspdf?.jsPDF;
+  if (!jsPDF) {
+    throw new Error('PDF export is unavailable because jsPDF did not load. Refresh the page and try again.');
+  }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PAGE_W = 210;

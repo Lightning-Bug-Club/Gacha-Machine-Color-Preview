@@ -13,36 +13,56 @@
 
 import { subscribe, setSelectedPart, getState } from './state.js';
 
-const SVG_PATH = './assets/machine-front.svg';
+const VIEW_PATHS = {
+  front: './assets/machine-front.svg',
+  side: './assets/machine-side.svg',
+  back: './assets/machine-back.svg',
+  iso: './assets/machine-iso.svg',
+};
 
 let _svgRoot = null;
+let _containerEl = null;
+let _currentView = 'front';
+let _unsubscribe = null;
 
 /**
  * Load and inject the layered SVG into `containerEl`.
  * Returns a promise that resolves once the SVG is in the DOM.
  */
-export async function initViewer(containerEl) {
-  const res = await fetch(SVG_PATH);
-  if (!res.ok) throw new Error(`Failed to load SVG: ${res.status}`);
+export async function initViewer(containerEl, viewName = 'front') {
+  _containerEl = containerEl;
+  if (!_unsubscribe) {
+    _unsubscribe = subscribe(_applyState);
+  }
+  return setCurrentView(viewName);
+}
+
+/**
+ * Swap the visible SVG view while keeping the same shared part-color state.
+ */
+export async function setCurrentView(viewName) {
+  const nextView = VIEW_PATHS[viewName] ? viewName : 'front';
+  if (!_containerEl) throw new Error('Viewer container is not initialized.');
+
+  const res = await fetch(VIEW_PATHS[nextView]);
+  if (!res.ok) throw new Error(`Failed to load ${nextView} SVG: ${res.status}`);
   const svgText = await res.text();
 
-  // Parse and inject as live DOM so we can target elements by id
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgText, 'image/svg+xml');
   const svgEl = doc.querySelector('svg');
-  if (!svgEl) throw new Error('Invalid SVG: no <svg> root element found.');
+  if (!svgEl) throw new Error(`Invalid ${nextView} SVG: no <svg> root element found.`);
 
-  // Make the SVG scale responsively
   svgEl.removeAttribute('width');
   svgEl.removeAttribute('height');
   svgEl.setAttribute('width', '100%');
   svgEl.setAttribute('height', '100%');
 
-  containerEl.innerHTML = '';
-  containerEl.appendChild(svgEl);
+  _containerEl.innerHTML = '';
+  _containerEl.appendChild(svgEl);
   _svgRoot = svgEl;
+  _currentView = nextView;
 
-  // Wire click events on every element that has data-part
   _svgRoot.querySelectorAll('[data-part]').forEach(el => {
     el.style.cursor = 'pointer';
     el.addEventListener('click', e => {
@@ -52,12 +72,7 @@ export async function initViewer(containerEl) {
     });
   });
 
-  // Subscribe to state changes to keep SVG colors and highlight in sync
-  subscribe(_applyState);
-
-  // Apply any state that was restored from the URL before init
   _applyState(getState());
-
   return svgEl;
 }
 
@@ -133,4 +148,8 @@ export function recolorPart(partId, hex) {
  */
 export function getSVGElement() {
   return _svgRoot;
+}
+
+export function getCurrentView() {
+  return _currentView;
 }
