@@ -9,12 +9,13 @@ An interactive **3D color configurator** you can embed on any website. Pick colo
 1. [Project overview](#project-overview)
 2. [Prerequisites](#prerequisites)
 3. [Folder structure](#folder-structure)
-4. [STL → GLB conversion with `convert.py`](#stl--glb-conversion)
-5. [Naming mesh parts in Blender](#naming-mesh-parts-in-blender)
-6. [Adding an HDRI for better lighting](#adding-an-hdri-for-better-lighting)
-7. [Running locally](#running-locally)
-8. [Embedding in your website](#embedding-in-your-website)
-9. [Customising colour presets and parts](#customising-colour-presets-and-parts)
+4. [Bambu Lab PLA colour data](#bambu-lab-pla-colour-data)
+5. [STL → GLB conversion with `convert.py`](#stl--glb-conversion)
+6. [Naming mesh parts in Blender](#naming-mesh-parts-in-blender)
+7. [Adding an HDRI for better lighting](#adding-an-hdri-for-better-lighting)
+8. [Running locally](#running-locally)
+9. [Embedding in your website](#embedding-in-your-website)
+10. [Customising colour presets and parts](#customising-colour-presets-and-parts)
 
 ---
 
@@ -50,8 +51,91 @@ An interactive **3D color configurator** you can embed on any website. Pick colo
 ├── requirements.txt    ← Python dependencies
 ├── models/
 │   └── gacha-machine.glb   ← drop your exported GLB here
+├── data/
+│   └── bambu-pla-colors.json  ← Bambu Lab PLA colour palette
+├── scripts/
+│   └── fetch_bambu_pla.py     ← optional palette updater / scraper
 └── hdri/
     └── environment.hdr     ← optional HDRI lighting file
+```
+
+---
+
+## Bambu Lab PLA colour data
+
+### Source
+
+The palette is compiled from:
+- **Primary:** <https://3dfilamentprofiles.com/filaments/bambu-lab/pla> (all pages)
+- **Cross-reference:** Bambu Lab official store <https://store.bambulab.com> and community data at <https://github.com/piitaya/bambu-filaments> and <https://github.com/DBorsheim/bambu-labs-filament-list>
+
+### Series covered
+
+| Series | Finish tag | Notes |
+|---|---|---|
+| Basic PLA | `basic` | 30 solid colours |
+| PLA Matte | `matte` | 25 flat-finish colours |
+| PLA Silk / Silk+ | `silk` | 13 single-colour + 5 dual-colour |
+| PLA Metal | `metal` | 5 metallic-effect colours |
+| PLA Galaxy | `galaxy` | 4 colours with glitter particles |
+| PLA Sparkle | `sparkle` | 6 fine-glitter colours |
+| PLA Marble | `marble` | 2 marble-texture colours |
+| PLA Wood | `wood` | 6 wood-fibre composite colours |
+| PLA Glow | `glow` | 5 glow-in-the-dark colours |
+| PLA Basic Gradient | `gradient` | 8 dual-tone gradient colours |
+| PLA Translucent | `gloss` | 10 semi-translucent colours |
+| PLA CF | `matte` | 7 carbon-fibre reinforced colours |
+
+### JSON schema
+
+Each entry in `data/bambu-pla-colors.json`:
+
+```jsonc
+{
+  "id":     "basic-pla-jade-white",
+  "name":   "Jade White",
+  "hex":    "#FFFFFF",
+  "series": "Basic PLA",
+  "finish": "basic",
+  "url":    "https://store.bambulab.com/products/pla-basic-filament",
+  // optional:
+  "hexes":  ["#9CDBD9","#FFFFFF"],
+  "notes":  "Teal to white gradient"
+}
+```
+
+Fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | ✅ | Unique, lowercase, kebab-case, series-prefixed (e.g. `matte-pla-ivory-white`) |
+| `name` | string | ✅ | Human-readable colour name |
+| `hex` | string | ✅ | Best-available `#RRGGBB`. For multi-colour filaments, the primary representative hex. |
+| `series` | string | ✅ | Human-readable series label (see table above) |
+| `finish` | string | ✅ | One of: `basic` `matte` `silk` `metal` `galaxy` `sparkle` `marble` `wood` `glow` `gradient` `gloss` |
+| `url` | string | ✅ | Bambu Lab store product page |
+| `hexes` | string[] | optional | Component colours for gradient/dual-silk/marble/galaxy filaments |
+| `notes` | string | optional | Effect description or `"hex approximate"` if the hex cannot be reliably determined |
+
+### Refreshing the palette
+
+A maintenance script is provided that scrapes the live source and regenerates the JSON:
+
+```bash
+# Install scraper dependencies (NOT required for the frontend)
+pip install requests beautifulsoup4
+
+# Fetch all pages and overwrite data/bambu-pla-colors.json
+python scripts/fetch_bambu_pla.py
+
+# Dry-run: print JSON to stdout, do not write file
+python scripts/fetch_bambu_pla.py --dry-run
+
+# Use static fallback only (no network request)
+python scripts/fetch_bambu_pla.py --no-scrape
+
+# Write to a custom path
+python scripts/fetch_bambu_pla.py --out path/to/output.json
 ```
 
 ---
