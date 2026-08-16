@@ -14,10 +14,24 @@ import {
   subscribe,
   decodeStateFromURL,
   pushStateToURL,
-  loadSelections,
 } from './state.js';
-import { initViewer, getSVGElement } from './viewer2d.js';
+import { initViewer, getSVGElement, getCurrentView, setCurrentView } from './viewer2d.js';
 import { exportPDF } from './pdf.js';
+
+const SERIES_ORDER = [
+  'Basic PLA',
+  'PLA Matte',
+  'PLA Silk',
+  'PLA Basic Gradient',
+  'PLA CF',
+  'PLA Sparkle',
+  'PLA Wood',
+  'PLA Translucent',
+  'PLA Glow',
+  'PLA Metal',
+  'PLA Galaxy',
+  'PLA Marble',
+];
 
 async function init() {
   // ── Load data ─────────────────────────────────────────────────────────────
@@ -40,7 +54,8 @@ async function init() {
 
   // ── Init viewer ──────────────────────────────────────────────────────────
   const viewerEl = document.getElementById('viewer');
-  await initViewer(viewerEl);
+  await initViewer(viewerEl, 'front');
+  _wireViewSelector();
 
   // ── Build parts list sidebar ──────────────────────────────────────────────
   const partsList = document.getElementById('parts-list');
@@ -55,30 +70,7 @@ async function init() {
 
   // ── Build color palette grid ──────────────────────────────────────────────
   const paletteGrid = document.getElementById('palette-grid');
-  colors.forEach(color => {
-    const btn = document.createElement('button');
-    btn.className = 'color-swatch';
-    btn.title = `${color.name} (${color.hex})`;
-    btn.dataset.colorId = color.id;
-    btn.style.backgroundColor = color.hex;
-    btn.setAttribute('aria-label', color.name);
-
-    // White swatch gets a border so it's visible
-    if (color.hex.toUpperCase() === '#FFFFFF') {
-      btn.style.border = '1px solid #ccc';
-    }
-
-    btn.addEventListener('click', () => {
-      const { selectedPartId } = getState();
-      if (!selectedPartId) {
-        _showToast('Select a part first, then choose a color.');
-        return;
-      }
-      setPartColor(selectedPartId, color.id);
-    });
-
-    paletteGrid.appendChild(btn);
-  });
+  _renderPaletteGroups(paletteGrid, colors);
 
   // ── Color name tooltip label ──────────────────────────────────────────────
   const colorNameEl = document.getElementById('color-name');
@@ -124,26 +116,32 @@ async function init() {
 
   // ── Export PDF button ─────────────────────────────────────────────────────
   document.getElementById('btn-export-pdf').addEventListener('click', async () => {
-    const svgEl = getSVGElement();
-    if (!svgEl) {
-      _showToast('Viewer not ready.');
-      return;
-    }
-
-    // Rasterize SVG to a PNG data URL via canvas
-    let previewDataURL = null;
     try {
-      previewDataURL = await _svgToDataURL(svgEl);
-    } catch (e) {
-      console.warn('SVG rasterization failed, exporting without preview:', e);
-    }
+      const svgEl = getSVGElement();
+      if (!svgEl) {
+        throw new Error('Viewer not ready yet.');
+      }
 
-    await exportPDF({
-      previewDataURL,
-      selections: getState().selections,
-      parts: getParts(),
-      colors: getColors(),
-    });
+      // Clone the live inline SVG, force XML namespaces, then rasterize it
+      // through an <img> + <canvas> pipeline so the current visible view exports.
+      let previewDataURL = null;
+      try {
+        previewDataURL = await _svgToDataURL(svgEl);
+      } catch (e) {
+        console.warn('SVG rasterization failed, exporting PDF legend without preview image:', e);
+      }
+
+      await exportPDF({
+        previewDataURL,
+        selections: getState().selections,
+        parts: getParts(),
+        colors: getColors(),
+      });
+      _showToast(`PDF exported from the ${_viewLabel(getCurrentView())} view.`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      _showToast(err.message || 'PDF export failed. Please try again.');
+    }
   });
 
   // ── Share URL button ──────────────────────────────────────────────────────
@@ -160,29 +158,140 @@ async function init() {
   }
 }
 
-/** Convert an inline SVG element to a PNG data URL via canvas. */
+function _wireViewSelector() {
+  const selector = document.getElementById('view-selector');
+  if (!selector) return;
+
+  selector.querySelectorAll('.view-tab').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const nextView = btn.dataset.view;
+      if (!nextView || nextView === getCurrentView()) return;
+
+      try {
+        await setCurrentView(nextView);
+        _syncViewTabs();
+      } catch (err) {
+        console.error('Failed to switch view:', err);
+        _showToast(`Could not load the ${_viewLabel(nextView)} view.`);
+      }
+    });
+  });
+
+  _syncViewTabs();
+}
+
+function _syncViewTabs() {
+  document.querySelectorAll('.view-tab').forEach(btn => {
+    const isActive = btn.dataset.view === getCurrentView();
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', String(isActive));
+  });
+}
+
+function _renderPaletteGroups(containerEl, colors) {
+  const grouped = colors.reduce((map, color) => {
+    const key = color.series || 'Other';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(color);
+    return map;
+  }, new Map());
+
+  const sortedSeries = Array.from(grouped.keys()).sort((a, b) => {
+    const aIndex = SERIES_ORDER.indexOf(a);
+    const bIndex = SERIES_ORDER.indexOf(b);
+    if (aIndex !== -1 || bIndex !== -1) {
+      return (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex)
+        - (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex);
+    }
+    return a.localeCompare(b);
+  });
+
+  sortedSeries.forEach(series => {
+    const section = document.createElement('section');
+    section.className = 'palette-series';
+
+    const heading = document.createElement('h3');
+    heading.className = 'palette-series-title';
+    heading.textContent = series;
+    section.appendChild(heading);
+
+    const groupGrid = document.createElement('div');
+    groupGrid.className = 'palette-series-grid';
+
+    grouped.get(series).forEach(color => {
+      const btn = document.createElement('button');
+      btn.className = 'color-swatch';
+      btn.title = `${color.name} (${color.hex})`;
+      btn.dataset.colorId = color.id;
+      btn.style.backgroundColor = color.hex;
+      btn.setAttribute('aria-label', `${series}: ${color.name}`);
+
+      if (color.hex.toUpperCase() === '#FFFFFF') {
+        btn.style.border = '1px solid #ccc';
+      }
+
+      btn.addEventListener('click', () => {
+        const { selectedPartId } = getState();
+        if (!selectedPartId) {
+          _showToast('Select a part first, then choose a color.');
+          return;
+        }
+        setPartColor(selectedPartId, color.id);
+      });
+
+      groupGrid.appendChild(btn);
+    });
+
+    section.appendChild(groupGrid);
+    containerEl.appendChild(section);
+  });
+}
+
+/** Convert the current inline SVG view to a PNG data URL via canvas. */
 async function _svgToDataURL(svgEl) {
-  const serializer = new XMLSerializer();
-  const svgStr = serializer.serializeToString(svgEl);
-  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  const viewBox = clone.viewBox?.baseVal;
+  const width = Math.max(1, Math.round(viewBox?.width || svgEl.clientWidth || 600));
+  const height = Math.max(1, Math.round(viewBox?.height || svgEl.clientHeight || 800));
+  clone.setAttribute('viewBox', clone.getAttribute('viewBox') || `0 0 ${width} ${height}`);
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgStr)}`;
 
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width  = 600;
-      canvas.height = 800;
+      const scale = 2;
+      canvas.width = width * scale;
+      canvas.height = height * scale;
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not create a canvas context for PDF export.'));
+        return;
+      }
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/png'));
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('Could not render the current SVG view for PDF export.'));
     img.src = url;
   });
+}
+
+function _viewLabel(viewName) {
+  return ({
+    front: 'Front',
+    side: 'Side',
+    back: 'Back',
+    iso: 'Isometric',
+  })[viewName] || 'Front';
 }
 
 /** Show a brief toast notification. */

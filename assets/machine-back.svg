@@ -1,0 +1,49 @@
+<!-- Placeholder art for the back view. Replace with real production artwork later, keeping the same id/data-part convention. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 540" width="300" height="540">
+  <rect x="24" y="20" width="252" height="494" rx="18" fill="#0f1728" opacity="0.18"/>
+
+  <rect id="part-lid" data-part="lid"
+        x="42" y="28" width="216" height="46" rx="8"
+        fill="#00AE42" stroke="#222" stroke-width="1.5"/>
+
+  <rect id="part-lid-lock" data-part="lid-lock"
+        x="120" y="58" width="60" height="20" rx="4"
+        fill="#545454" stroke="#222" stroke-width="1.3"/>
+
+  <rect id="part-back-cover" data-part="back-cover"
+        x="34" y="76" width="232" height="398" rx="10"
+        fill="#545454" stroke="#111" stroke-width="1.5"/>
+
+  <rect id="part-top-chamber" data-part="top-chamber"
+        x="50" y="92" width="200" height="220" rx="10"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <rect id="part-window" data-part="window"
+        x="66" y="108" width="168" height="186" rx="8"
+        fill="#0086D6" stroke="#0056B8" stroke-width="1" opacity="0.45"/>
+
+  <circle id="part-main-gear" data-part="main-gear"
+          cx="150" cy="236" r="32"
+          fill="#8E9089" stroke="#222" stroke-width="1.4"/>
+  <circle cx="150" cy="236" r="24" fill="none" stroke="#545454" stroke-width="2" stroke-dasharray="8 5"/>
+
+  <rect id="part-hole-blocker" data-part="hole-blocker"
+        x="100" y="286" width="100" height="28" rx="5"
+        fill="#FFFFFF" stroke="#AAA" stroke-width="1"/>
+
+  <rect id="part-mid-plate" data-part="mid-plate"
+        x="40" y="320" width="220" height="18" rx="3"
+        fill="#545454" stroke="#222" stroke-width="1.4"/>
+
+  <rect id="part-bottom-chamber" data-part="bottom-chamber"
+        x="42" y="340" width="216" height="128" rx="6"
+        fill="#0056B8" stroke="#222" stroke-width="1.5"/>
+
+  <circle id="part-rear-lock-knob" data-part="rear-lock-knob"
+          cx="244" cy="404" r="14"
+          fill="#C12E1F" stroke="#222" stroke-width="1.5"/>
+
+  <rect id="part-bottom-plate" data-part="bottom-plate-mouth"
+        x="36" y="474" width="228" height="30" rx="4"
+        fill="#545454" stroke="#222" stroke-width="1.5"/>
+</svg>
