@@ -27,6 +27,11 @@
 
 import { subscribe, setSelectedPart, getState } from './state.js';
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 5;
+const ZOOM_STEP = 1.2;
+const PAN_THRESHOLD_PX = 4;
+
 // Finalized SVG layer id → logical part id
 // Illustrator encodes special chars: _ becomes x5F, & becomes x26_, . and space stay
 const LAYER_ID_MAP = {
@@ -45,14 +50,14 @@ const LAYER_ID_MAP = {
   'Back_Cover':                   'back-cover',
   'Rear_Lock_Knob':               'rear-lock-knob',
   'Lid':                          'lid',
-  'Window_Overlay':               'window',   // simulated window in machine-side.svg
+  'Window_Overlay':               'window',
 };
 
 // These layers are NOT user-selectable; they get special fixed/follower treatment
 const FIXED_LAYERS = {
-  'Top_Chamber_x5F_Inside':           '#FFFFFF', // always white
-  'Top_Chamber_x5F_Inside_x5F_Back':  null,      // null = mirrors top-chamber color
-  'Black':                             '#565656', // always gray
+  'Top_Chamber_x5F_Inside':           '#FFFFFF',
+  'Top_Chamber_x5F_Inside_x5F_Back':  null,
+  'Black':                             '#565656',
 };
 
 const VIEW_PATHS = {
@@ -65,6 +70,12 @@ let _svgRoot = null;
 let _containerEl = null;
 let _currentView = 'front';
 let _unsubscribe = null;
+let _suppressPartClickUntil = 0;
+let _viewportState = {
+  zoom: 1,
+  centerXRatio: 0.5,
+  centerYRatio: 0.5,
+};
 
 /**
  * Load and inject the layered SVG into `containerEl`.
@@ -85,83 +96,209 @@ export async function setCurrentView(viewName) {
   const nextView = VIEW_PATHS[viewName] ? viewName : 'front';
   if (!_containerEl) throw new Error('Viewer container is not initialized.');
 
-  const res = await fetch(VIEW_PATHS[nextView]);
-  if (!res.ok) throw new Error(`Failed to load ${nextView} SVG: ${res.status}`);
-  const svgText = await res.text();
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(svgText, 'image/svg+xml');
-  const svgEl = doc.querySelector('svg');
-  if (!svgEl) throw new Error(`Invalid ${nextView} SVG: no <svg> root element found.`);
-
-  svgEl.removeAttribute('width');
-  svgEl.removeAttribute('height');
-  svgEl.setAttribute('width', '100%');
-  svgEl.setAttribute('height', '100%');
-
-  // Normalize finalized layer ids → data-part attributes
-  _normalizeLayers(svgEl);
-
+  const svgEl = await _loadViewSVG(nextView);
   _containerEl.innerHTML = '';
   _containerEl.appendChild(svgEl);
+
   _svgRoot = svgEl;
   _currentView = nextView;
 
-  // Wire click-to-select on colorable parts
-  _svgRoot.querySelectorAll('[data-part]').forEach(el => {
+  if (nextView === 'side') {
+    _fitWindowOverlay(svgEl);
+  }
+
+  _wireInteractions(svgEl);
+  _applyViewportToSVG(svgEl);
+  _applyState(getState());
+  return svgEl;
+}
+
+export async function createPreviewSVG(viewName, state = getState()) {
+  const nextView = VIEW_PATHS[viewName] ? viewName : 'front';
+  const svgEl = await _loadViewSVG(nextView);
+
+  _withMeasurementMount(svgEl, () => {
+    if (nextView === 'side') {
+      _fitWindowOverlay(svgEl);
+    }
+    _applyStateToSVG(svgEl, state, nextView, { includeSelection: false });
+    _resetSVGViewport(svgEl);
+  });
+
+  return svgEl;
+}
+
+export function zoomIn() {
+  if (!_svgRoot) return;
+  _zoomFromCurrentBox(_clampZoom(_viewportState.zoom * ZOOM_STEP));
+}
+
+export function zoomOut() {
+  if (!_svgRoot) return;
+  _zoomFromCurrentBox(_clampZoom(_viewportState.zoom / ZOOM_STEP));
+}
+
+export function resetViewTransform() {
+  _viewportState = {
+    zoom: 1,
+    centerXRatio: 0.5,
+    centerYRatio: 0.5,
+  };
+  if (_svgRoot) {
+    _applyViewportToSVG(_svgRoot);
+  }
+}
+
+function _wireInteractions(svgEl) {
+  svgEl.querySelectorAll('[data-part]').forEach(el => {
     el.style.cursor = 'pointer';
     el.addEventListener('click', e => {
+      if (performance.now() < _suppressPartClickUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       e.stopPropagation();
       const partId = el.getAttribute('data-part');
       setSelectedPart(partId);
     });
   });
 
-  // Auto-fit window overlay to covered parts (side view only, requires DOM layout)
-  if (nextView === 'side') {
-    _fitWindowOverlay(svgEl);
-  }
+  svgEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
 
-  _applyState(getState());
+    const currentBox = _getCurrentViewBox(svgEl);
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    const anchorX = currentBox.x + currentBox.width * fx;
+    const anchorY = currentBox.y + currentBox.height * fy;
+    const nextZoom = _clampZoom(
+      e.deltaY < 0 ? _viewportState.zoom * ZOOM_STEP : _viewportState.zoom / ZOOM_STEP
+    );
+
+    _setZoomWithAnchor(nextZoom, { anchorX, anchorY, fx, fy });
+  }, { passive: false });
+
+  let panState = null;
+
+  const endPan = pointerId => {
+    if (!panState) return;
+    if (panState.moved) {
+      _suppressPartClickUntil = performance.now() + 120;
+    }
+    if (pointerId !== undefined) {
+      try {
+        svgEl.releasePointerCapture(pointerId);
+      } catch (_) { /* ignore */ }
+    }
+    panState = null;
+    if (_svgRoot) {
+      _updatePanCursor(false);
+    }
+  };
+
+  svgEl.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || _viewportState.zoom <= 1) return;
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    panState = {
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startBox: _getCurrentViewBox(svgEl),
+      rect,
+      moved: false,
+    };
+    svgEl.setPointerCapture(e.pointerId);
+    _updatePanCursor(true);
+  });
+
+  svgEl.addEventListener('pointermove', e => {
+    if (!panState || !_svgRoot || e.pointerId !== panState.pointerId) return;
+    const dxPx = e.clientX - panState.startClientX;
+    const dyPx = e.clientY - panState.startClientY;
+    if (!panState.moved && Math.hypot(dxPx, dyPx) < PAN_THRESHOLD_PX) return;
+
+    panState.moved = true;
+    const dx = dxPx * (panState.startBox.width / panState.rect.width);
+    const dy = dyPx * (panState.startBox.height / panState.rect.height);
+    const nextBox = _clampViewBox({
+      x: panState.startBox.x - dx,
+      y: panState.startBox.y - dy,
+      width: panState.startBox.width,
+      height: panState.startBox.height,
+    }, _getDefaultViewBox(_svgRoot));
+
+    _setViewportFromBox(nextBox, _getDefaultViewBox(_svgRoot));
+    _applyViewportToSVG(_svgRoot);
+  });
+
+  svgEl.addEventListener('pointerup', e => {
+    if (panState && e.pointerId === panState.pointerId) {
+      endPan(e.pointerId);
+    }
+  });
+  svgEl.addEventListener('pointercancel', e => {
+    if (panState && e.pointerId === panState.pointerId) {
+      endPan(e.pointerId);
+    }
+  });
+
+  _updatePanCursor(false);
+}
+
+function _updatePanCursor(isDragging) {
+  if (!_svgRoot) return;
+  const cursor = _viewportState.zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : '';
+  _svgRoot.style.cursor = cursor;
+}
+
+async function _loadViewSVG(viewName) {
+  const res = await fetch(VIEW_PATHS[viewName]);
+  if (!res.ok) throw new Error(`Failed to load ${viewName} SVG: ${res.status}`);
+
+  const svgText = await res.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, 'image/svg+xml');
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl) throw new Error(`Invalid ${viewName} SVG: no <svg> root element found.`);
+
+  svgEl.removeAttribute('width');
+  svgEl.removeAttribute('height');
+  svgEl.setAttribute('width', '100%');
+  svgEl.setAttribute('height', '100%');
+
+  _normalizeLayers(svgEl);
+  _storeDefaultViewBox(svgEl);
+  _resetSVGViewport(svgEl);
   return svgEl;
 }
 
-/**
- * Walk the freshly parsed SVG and map finalized layer <g id="..."> elements to
- * data-part attributes so the [data-part] engine can target them.
- * Also tags fixed/follower layers for special treatment in _applyState.
- */
 function _normalizeLayers(svgEl) {
   let windowOverlayEl = null;
 
-  // Iterate top-level <g> elements (the Illustrator layers)
   svgEl.querySelectorAll(':scope > g[id]').forEach(g => {
     const rawId = g.getAttribute('id');
 
     if (LAYER_ID_MAP[rawId]) {
       g.setAttribute('data-part', LAYER_ID_MAP[rawId]);
       if (rawId === 'Window_Overlay') windowOverlayEl = g;
-    } else if (FIXED_LAYERS.hasOwnProperty(rawId)) {
-      // Mark these so _applyState can find them
+    } else if (Object.prototype.hasOwnProperty.call(FIXED_LAYERS, rawId)) {
       g.setAttribute('data-fixed-layer', rawId);
     }
   });
 
-  // Guarantee window overlay is drawn on top (last child = highest z-order)
   if (windowOverlayEl && svgEl.lastElementChild !== windowOverlayEl) {
     svgEl.appendChild(windowOverlayEl);
   }
 }
 
-/**
- * Compute the union bounding box of hole-blocker, main-gear, and mid-plate in the
- * side view, then resize the Window_Overlay rect to cover that area (plus padding).
- * Must be called after the SVG is appended to the live DOM so getBBox() works.
- */
 function _fitWindowOverlay(svgEl) {
-  const PADDING = 6; // user units of extra coverage on each side
   const CORNER_RADIUS = 8;
-  const FALLBACK = { x: 476, y: 155, width: 230, height: 240 }; // original hardcoded values
+  const HARDCODED_FALLBACK = { x: 476, y: 155, width: 230, height: 240 };
 
   const overlayGroup = svgEl.querySelector('[data-part="window"]');
   if (!overlayGroup) return;
@@ -169,77 +306,88 @@ function _fitWindowOverlay(svgEl) {
   const overlayRect = overlayGroup.querySelector('rect');
   if (!overlayRect) return;
 
-  // Collect bboxes from target parts; guard against missing elements or getBBox errors
-  const targetParts = ['hole-blocker', 'main-gear', 'mid-plate'];
-  let union = null;
-  targetParts.forEach(partId => {
-    const el = svgEl.querySelector(`[data-part="${partId}"]`);
-    if (!el) return;
-    try {
-      const bb = el.getBBox();
-      if (bb.width === 0 && bb.height === 0) return;
-      if (!union) {
-        union = { x: bb.x, y: bb.y, x2: bb.x + bb.width, y2: bb.y + bb.height };
-      } else {
-        union.x  = Math.min(union.x,  bb.x);
-        union.y  = Math.min(union.y,  bb.y);
-        union.x2 = Math.max(union.x2, bb.x + bb.width);
-        union.y2 = Math.max(union.y2, bb.y + bb.height);
-      }
-    } catch (_) { /* element not rendered yet — skip */ }
-  });
+  const insideLayer = svgEl.querySelector('[data-fixed-layer="Top_Chamber_x5F_Inside"], #Top_Chamber_x5F_Inside');
+  const insideBox = _safeGetBBox(insideLayer);
+  const unionBox = _unionPartBoxes(svgEl, ['hole-blocker', 'main-gear', 'mid-plate']);
+  const box = insideBox || unionBox || HARDCODED_FALLBACK;
 
-  const box = union
-    ? { x: union.x - PADDING, y: union.y - PADDING,
-        width: union.x2 - union.x + PADDING * 2,
-        height: union.y2 - union.y + PADDING * 2 }
-    : FALLBACK;
-
-  overlayRect.setAttribute('x',      box.x);
-  overlayRect.setAttribute('y',      box.y);
-  overlayRect.setAttribute('width',  box.width);
+  overlayRect.setAttribute('x', box.x);
+  overlayRect.setAttribute('y', box.y);
+  overlayRect.setAttribute('width', box.width);
   overlayRect.setAttribute('height', box.height);
-  overlayRect.setAttribute('rx',     CORNER_RADIUS);
-  overlayRect.setAttribute('ry',     CORNER_RADIUS);
+  overlayRect.setAttribute('rx', CORNER_RADIUS);
+  overlayRect.setAttribute('ry', CORNER_RADIUS);
 }
 
-/**
- * Apply color and selection highlight from the current state snapshot to the SVG.
- * Called automatically on every state change via subscribe().
- */
+function _unionPartBoxes(svgEl, partIds) {
+  let union = null;
+
+  partIds.forEach(partId => {
+    const box = _safeGetBBox(svgEl.querySelector(`[data-part="${partId}"]`));
+    if (!box) return;
+
+    if (!union) {
+      union = { x: box.x, y: box.y, x2: box.x + box.width, y2: box.y + box.height };
+      return;
+    }
+
+    union.x = Math.min(union.x, box.x);
+    union.y = Math.min(union.y, box.y);
+    union.x2 = Math.max(union.x2, box.x + box.width);
+    union.y2 = Math.max(union.y2, box.y + box.height);
+  });
+
+  return union
+    ? { x: union.x, y: union.y, width: union.x2 - union.x, height: union.y2 - union.y }
+    : null;
+}
+
+function _safeGetBBox(el) {
+  if (!el) return null;
+
+  try {
+    const box = el.getBBox();
+    if (!box || (!box.width && !box.height)) return null;
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  } catch (_) {
+    return null;
+  }
+}
+
 function _applyState(state) {
   if (!_svgRoot) return;
+  _applyStateToSVG(_svgRoot, state, _currentView, { includeSelection: true });
+}
 
+function _applyStateToSVG(svgRoot, state, viewName, { includeSelection }) {
   const topChamberHex = state.selections['top-chamber']
     ? _resolveHex(state.selections['top-chamber'])
     : null;
 
-  // ── Colorable parts (user-selectable) ──────────────────────────────────
-  _svgRoot.querySelectorAll('[data-part]').forEach(el => {
+  svgRoot.querySelectorAll('[data-part]').forEach(el => {
     const partId = el.getAttribute('data-part');
 
-    // Windows: visibility controlled by windowsMaterial + current view
     if (partId === 'window') {
-      const show = _currentView === 'side' && state.windowsMaterial === 'printed';
+      const show = viewName === 'side' && state.windowsMaterial === 'printed';
       el.style.display = show ? '' : 'none';
       if (show) {
         el.setAttribute('opacity', '0.8');
-        const colorId = state.selections['window'];
-        // Use selection color, or fall back to basic-pla-cyan default
-        const hex = colorId ? _resolveHex(colorId) : _resolveHex('basic-pla-cyan');
-        _setFillRecursive(el, hex);
+        const colorId = state.selections.window || 'basic-pla-jade-white';
+        _setFillRecursive(el, _resolveHex(colorId));
       }
-      // Don't fall through to selection highlight for windows
       return;
     }
 
-    // Recolor
     const colorId = state.selections[partId];
     if (colorId) {
       _setFillRecursive(el, _resolveHex(colorId));
     }
 
-    // Selection highlight
+    if (!includeSelection) {
+      el.removeAttribute('filter');
+      return;
+    }
+
     if (partId === state.selectedPartId) {
       el.setAttribute('stroke', '#FFD700');
       el.setAttribute('stroke-width', '4');
@@ -257,8 +405,7 @@ function _applyState(state) {
     }
   });
 
-  // ── Fixed / follower layers ─────────────────────────────────────────────
-  _svgRoot.querySelectorAll('[data-fixed-layer]').forEach(el => {
+  svgRoot.querySelectorAll('[data-fixed-layer]').forEach(el => {
     const rawId = el.getAttribute('data-fixed-layer');
     if (rawId === 'Top_Chamber_x5F_Inside') {
       _setFillRecursive(el, '#FFFFFF');
@@ -270,25 +417,19 @@ function _applyState(state) {
   });
 }
 
-/**
- * Set fill on a group element and all its descendant shape children.
- * Uses inline style so it overrides CSS class-based fills (the finalized SVGs
- * use Illustrator's .stN CSS classes for default fills; inline style wins).
- */
 function _setFillRecursive(el, hex) {
   if (el.tagName === 'g' || el.tagName === 'G') {
-    el.querySelectorAll('path, polygon, polyline, rect, circle, ellipse').forEach(shape => {
+    el.querySelectorAll('path, polygon, polyline, rect, circle, ellipse, line').forEach(shape => {
       shape.style.fill = hex;
+      if (shape.tagName === 'line' || shape.tagName === 'polyline') {
+        shape.style.stroke = '#000000';
+      }
     });
   } else {
     el.style.fill = hex;
   }
 }
 
-/**
- * Resolve a colorId to a hex string.
- * Accepts either "#RRGGBB" or a color id from the palette.
- */
 function _resolveHex(colorId) {
   if (/^#[0-9a-fA-F]{3,6}$/.test(colorId)) return colorId;
   if (window.__paletteMap) {
@@ -296,6 +437,134 @@ function _resolveHex(colorId) {
     if (entry) return entry.hex;
   }
   return colorId;
+}
+
+function _storeDefaultViewBox(svgEl) {
+  const raw = svgEl.getAttribute('viewBox');
+  if (raw) {
+    svgEl.setAttribute('data-default-viewbox', raw);
+  }
+}
+
+function _resetSVGViewport(svgEl) {
+  const raw = svgEl.getAttribute('data-default-viewbox');
+  if (raw) {
+    svgEl.setAttribute('viewBox', raw);
+  }
+}
+
+function _applyViewportToSVG(svgEl) {
+  const base = _getDefaultViewBox(svgEl);
+  const width = base.width / _viewportState.zoom;
+  const height = base.height / _viewportState.zoom;
+  const centerX = base.x + base.width * _viewportState.centerXRatio;
+  const centerY = base.y + base.height * _viewportState.centerYRatio;
+
+  const clamped = _clampViewBox({
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+    width,
+    height,
+  }, base);
+
+  svgEl.setAttribute('viewBox', `${clamped.x} ${clamped.y} ${clamped.width} ${clamped.height}`);
+  _setViewportFromBox(clamped, base);
+  _updatePanCursor(false);
+}
+
+function _zoomFromCurrentBox(nextZoom) {
+  if (!_svgRoot) return;
+  const current = _getCurrentViewBox(_svgRoot);
+  _setZoomWithAnchor(nextZoom, {
+    anchorX: current.x + current.width / 2,
+    anchorY: current.y + current.height / 2,
+    fx: 0.5,
+    fy: 0.5,
+  });
+}
+
+function _setZoomWithAnchor(nextZoom, { anchorX, anchorY, fx, fy }) {
+  if (!_svgRoot || nextZoom === _viewportState.zoom) return;
+  const base = _getDefaultViewBox(_svgRoot);
+  const nextWidth = base.width / nextZoom;
+  const nextHeight = base.height / nextZoom;
+  const nextBox = _clampViewBox({
+    x: anchorX - nextWidth * fx,
+    y: anchorY - nextHeight * fy,
+    width: nextWidth,
+    height: nextHeight,
+  }, base);
+
+  _viewportState.zoom = nextZoom;
+  _setViewportFromBox(nextBox, base);
+  _applyViewportToSVG(_svgRoot);
+}
+
+function _setViewportFromBox(box, base) {
+  _viewportState = {
+    zoom: _clampZoom(base.width / box.width),
+    centerXRatio: (box.x + box.width / 2 - base.x) / base.width,
+    centerYRatio: (box.y + box.height / 2 - base.y) / base.height,
+  };
+}
+
+function _clampViewBox(box, base) {
+  const minX = box.width > base.width ? base.x - (box.width - base.width) / 2 : base.x;
+  const maxX = box.width > base.width ? minX : base.x + base.width - box.width;
+  const minY = box.height > base.height ? base.y - (box.height - base.height) / 2 : base.y;
+  const maxY = box.height > base.height ? minY : base.y + base.height - box.height;
+
+  return {
+    x: _clamp(box.x, minX, maxX),
+    y: _clamp(box.y, minY, maxY),
+    width: box.width,
+    height: box.height,
+  };
+}
+
+function _getDefaultViewBox(svgEl) {
+  return _parseViewBox(svgEl.getAttribute('data-default-viewbox') || svgEl.getAttribute('viewBox'));
+}
+
+function _getCurrentViewBox(svgEl) {
+  return _parseViewBox(svgEl.getAttribute('viewBox'));
+}
+
+function _parseViewBox(raw) {
+  const values = (raw || '0 0 1224 792').trim().split(/\s+/).map(Number);
+  return {
+    x: values[0] || 0,
+    y: values[1] || 0,
+    width: values[2] || 1224,
+    height: values[3] || 792,
+  };
+}
+
+function _withMeasurementMount(svgEl, fn) {
+  const mount = document.createElement('div');
+  mount.style.position = 'absolute';
+  mount.style.left = '-100000px';
+  mount.style.top = '0';
+  mount.style.width = '1224px';
+  mount.style.height = '792px';
+  mount.style.visibility = 'hidden';
+  mount.style.pointerEvents = 'none';
+  mount.appendChild(svgEl);
+  document.body.appendChild(mount);
+
+  try {
+    return fn();
+  } finally {
+    mount.remove();
+  }
+}
+
+function _clampZoom(value) {
+  return _clamp(value, ZOOM_MIN, ZOOM_MAX);
+}
+
+function _clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 /**

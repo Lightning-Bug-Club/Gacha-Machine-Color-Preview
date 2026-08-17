@@ -4,7 +4,7 @@
  * Phase 1 entry point. In Phase 2 (Three.js), only the viewer import changes.
  */
 
-import { loadPalette, getColors, getColorById } from './palette.js';
+import { loadPalette, getAllColors, getColorById } from './palette.js';
 import { loadParts, getParts } from './parts.js';
 import {
   getState,
@@ -15,36 +15,37 @@ import {
   decodeStateFromURL,
   pushStateToURL,
 } from './state.js';
-import { initViewer, getSVGElement, getCurrentView, setCurrentView } from './viewer2d.js';
+import {
+  initViewer,
+  createPreviewSVG,
+  getCurrentView,
+  setCurrentView,
+  zoomIn,
+  zoomOut,
+  resetViewTransform,
+} from './viewer2d.js';
 import { exportPDF } from './pdf.js';
 
 const SERIES_ORDER = [
   'Basic PLA',
   'PLA Matte',
   'PLA Silk',
-  'PLA Basic Gradient',
-  'PLA CF',
-  'PLA Sparkle',
   'PLA Wood',
   'PLA Translucent',
   'PLA Glow',
-  'PLA Metal',
-  'PLA Galaxy',
-  'PLA Marble',
 ];
 
+const PDF_VIEWS = ['front', 'side', 'back'];
+
 async function init() {
-  // ── Load data ─────────────────────────────────────────────────────────────
   const [colors, parts] = await Promise.all([loadPalette(), loadParts()]);
+  const allColors = getAllColors();
 
-  // Expose palette map globally so viewer2d.js can resolve color ids to hex
   window.__paletteMap = {};
-  colors.forEach(c => { window.__paletteMap[c.id] = c; });
+  allColors.forEach(c => { window.__paletteMap[c.id] = c; });
 
-  // ── Restore state from URL (before init so the viewer gets initial colors) ─
   decodeStateFromURL();
 
-  // Apply default colors for parts that have no URL selection
   const state = getState();
   parts.forEach(part => {
     if (!state.selections[part.id]) {
@@ -52,14 +53,12 @@ async function init() {
     }
   });
 
-  // ── Init viewer ──────────────────────────────────────────────────────────
   const viewerEl = document.getElementById('viewer');
   await initViewer(viewerEl, 'front');
   _wireViewSelector();
+  _wireZoomControls();
 
-  // ── Build parts list sidebar ──────────────────────────────────────────────
   const partsList = document.getElementById('parts-list');
-  // Exclude 'window' from the main parts list (it's controlled via the windows selector)
   const displayParts = parts.filter(p => p.id !== 'window');
   displayParts.forEach(part => {
     const li = document.createElement('li');
@@ -70,14 +69,11 @@ async function init() {
     partsList.appendChild(li);
   });
 
-  // ── Windows material selector ─────────────────────────────────────────────
   _wireWindowsSelector();
 
-  // ── Build color palette grid ──────────────────────────────────────────────
   const paletteGrid = document.getElementById('palette-grid');
   _renderPaletteGroups(paletteGrid, colors);
 
-  // ── Color name tooltip label ──────────────────────────────────────────────
   const colorNameEl = document.getElementById('color-name');
   paletteGrid.addEventListener('mouseover', e => {
     const btn = e.target.closest('.color-swatch');
@@ -87,14 +83,11 @@ async function init() {
     colorNameEl.textContent = '';
   });
 
-  // ── Reactive UI updates ───────────────────────────────────────────────────
   subscribe(snap => {
-    // Highlight selected part in sidebar
     partsList.querySelectorAll('.part-item').forEach(li => {
       li.classList.toggle('selected', li.dataset.partId === snap.selectedPartId);
     });
 
-    // Show color name & swatch for selected part
     const activeColorId = snap.selectedPartId
       ? snap.selections[snap.selectedPartId]
       : null;
@@ -107,15 +100,14 @@ async function init() {
         selectedColorEl.style.setProperty('--swatch', activeColor.hex);
       } else {
         selectedColorEl.textContent = '';
+        selectedColorEl.style.removeProperty('--swatch');
       }
     }
 
-    // Highlight active swatch in palette
     paletteGrid.querySelectorAll('.color-swatch').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.colorId === activeColorId);
     });
 
-    // Disable window color picking when "Clear acrylic" is selected
     const windowsPrinted = snap.windowsMaterial === 'printed';
     paletteGrid.querySelectorAll('.color-swatch').forEach(btn => {
       if (snap.selectedPartId === 'window' && !windowsPrinted) {
@@ -129,38 +121,26 @@ async function init() {
       }
     });
 
-    // Push state to URL for shareability
     pushStateToURL();
   });
 
-  // ── Export PDF button ─────────────────────────────────────────────────────
   document.getElementById('btn-export-pdf').addEventListener('click', async () => {
     try {
-      const svgEl = getSVGElement();
-      if (!svgEl) throw new Error('Viewer not ready yet.');
-
-      let previewDataURL = null;
-      try {
-        previewDataURL = await _svgToDataURL(svgEl);
-      } catch (e) {
-        console.warn('SVG rasterization failed, exporting PDF legend without preview image:', e);
-      }
-
+      const previewDataURLs = await _buildPDFPreviews();
       await exportPDF({
-        previewDataURL,
+        previewDataURLs,
         selections: getState().selections,
         windowsMaterial: getState().windowsMaterial,
         parts: getParts(),
-        colors: getColors(),
+        colors: getAllColors(),
       });
-      _showToast(`PDF exported from the ${_viewLabel(getCurrentView())} view.`);
+      _showToast('PDF exported.');
     } catch (err) {
       console.error('PDF export failed:', err);
       _showToast(err.message || 'PDF export failed. Please try again.');
     }
   });
 
-  // ── Share URL button ──────────────────────────────────────────────────────
   const btnShare = document.getElementById('btn-share');
   if (btnShare) {
     btnShare.addEventListener('click', () => {
@@ -196,6 +176,12 @@ function _wireViewSelector() {
   _syncViewTabs();
 }
 
+function _wireZoomControls() {
+  document.getElementById('btn-zoom-in')?.addEventListener('click', () => zoomIn());
+  document.getElementById('btn-zoom-out')?.addEventListener('click', () => zoomOut());
+  document.getElementById('btn-zoom-reset')?.addEventListener('click', () => resetViewTransform());
+}
+
 function _syncViewTabs() {
   document.querySelectorAll('.view-tab').forEach(btn => {
     const isActive = btn.dataset.view === getCurrentView();
@@ -208,7 +194,6 @@ function _wireWindowsSelector() {
   const radios = document.querySelectorAll('input[name="windows-material"]');
   if (!radios.length) return;
 
-  // Sync radio to current state
   const currentMaterial = getState().windowsMaterial;
   radios.forEach(r => { r.checked = r.value === currentMaterial; });
 
@@ -216,7 +201,6 @@ function _wireWindowsSelector() {
     radio.addEventListener('change', () => {
       if (radio.checked) {
         setWindowsMaterial(radio.value);
-        // If switching to acrylic, deselect window part so palette isn't confusing
         if (radio.value === 'acrylic' && getState().selectedPartId === 'window') {
           setSelectedPart(null);
         }
@@ -224,7 +208,6 @@ function _wireWindowsSelector() {
     });
   });
 
-  // Keep radios in sync with state (e.g. URL restore)
   subscribe(snap => {
     radios.forEach(r => { r.checked = r.value === snap.windowsMaterial; });
   });
@@ -263,13 +246,14 @@ function _renderPaletteGroups(containerEl, colors) {
     grouped.get(series).forEach(color => {
       const btn = document.createElement('button');
       btn.className = 'color-swatch';
+      btn.type = 'button';
       btn.title = `${color.name} (${color.hex})`;
       btn.dataset.colorId = color.id;
       btn.style.backgroundColor = color.hex;
       btn.setAttribute('aria-label', `${series}: ${color.name}`);
 
       if (color.hex.toUpperCase() === '#FFFFFF') {
-        btn.style.border = '1px solid #ccc';
+        btn.classList.add('is-white');
       }
 
       btn.addEventListener('click', () => {
@@ -278,7 +262,6 @@ function _renderPaletteGroups(containerEl, colors) {
           _showToast('Select a part first, then choose a color.');
           return;
         }
-        // Block window color selection when acrylic is chosen
         if (selectedPartId === 'window' && windowsMaterial === 'acrylic') {
           _showToast('Switch to "3D printed windows" to choose a window color.');
           return;
@@ -294,15 +277,32 @@ function _renderPaletteGroups(containerEl, colors) {
   });
 }
 
-/** Convert the current inline SVG view to a PNG data URL via canvas. */
+async function _buildPDFPreviews() {
+  const state = getState();
+  const previews = [];
+
+  for (const viewName of PDF_VIEWS) {
+    try {
+      const svgEl = await createPreviewSVG(viewName, state);
+      const dataURL = await _svgToDataURL(svgEl);
+      previews.push({ view: viewName, dataURL });
+    } catch (err) {
+      console.warn(`Skipping ${viewName} PDF preview after rasterization failure:`, err);
+    }
+  }
+
+  return previews;
+}
+
+/** Convert an SVG view to a PNG data URL via canvas. */
 async function _svgToDataURL(svgEl) {
   const clone = svgEl.cloneNode(true);
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
 
   const viewBox = clone.viewBox?.baseVal;
-  const width = Math.max(1, Math.round(viewBox?.width || svgEl.clientWidth || 600));
-  const height = Math.max(1, Math.round(viewBox?.height || svgEl.clientHeight || 800));
+  const width = Math.max(1, Math.round(viewBox?.width || 1224));
+  const height = Math.max(1, Math.round(viewBox?.height || 792));
   clone.setAttribute('viewBox', clone.getAttribute('viewBox') || `0 0 ${width} ${height}`);
   clone.setAttribute('width', String(width));
   clone.setAttribute('height', String(height));
@@ -327,7 +327,7 @@ async function _svgToDataURL(svgEl) {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL('image/png'));
     };
-    img.onerror = () => reject(new Error('Could not render the current SVG view for PDF export.'));
+    img.onerror = () => reject(new Error('Could not render an SVG view for PDF export.'));
     img.src = url;
   });
 }
@@ -336,7 +336,6 @@ function _viewLabel(viewName) {
   return ({ front: 'Front', side: 'Side', back: 'Back' })[viewName] || 'Front';
 }
 
-/** Show a brief toast notification. */
 function _showToast(msg) {
   let toast = document.getElementById('toast');
   if (!toast) {
@@ -353,5 +352,5 @@ function _showToast(msg) {
 init().catch(err => {
   console.error('Failed to initialize app:', err);
   document.getElementById('viewer').innerHTML =
-    `<p style="color:red;padding:1rem;">Error loading app: ${err.message}</p>`;
+    `<p style="color:#800000;padding:1rem;">Error loading app: ${err.message}</p>`;
 });

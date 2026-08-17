@@ -5,87 +5,84 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gata-Gata Gacha Machine — Color Customizer</title>
   <link rel="stylesheet" href="src/styles.css" />
-
-  <!-- jsPDF via CDN (no bundler required for Phase 1) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-          crossorigin="anonymous"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
-
-    <!-- ── Header ─────────────────────────────────────────────────────── -->
-    <header>
-      <h1>⚙️ Gata-Gata Gacha Machine — Color Customizer</h1>
+    <header class="window-titlebar">
+      <h1>Gata-Gata Gacha Machine — Color Customizer</h1>
       <div class="header-actions">
-        <button id="btn-share" class="btn btn-secondary" title="Copy shareable link">
-          🔗 Share
-        </button>
-        <button id="btn-export-pdf" class="btn btn-primary" title="Export build blueprint PDF">
-          📄 Export PDF
-        </button>
+        <button id="btn-share" class="btn" type="button" title="Copy shareable link">Share</button>
+        <button id="btn-export-pdf" class="btn" type="button" title="Export build blueprint PDF">Export PDF</button>
       </div>
     </header>
 
-    <!-- ── Parts sidebar ──────────────────────────────────────────────── -->
-    <aside id="sidebar">
-      <h2>Parts</h2>
-      <ul id="parts-list"></ul>
+    <div id="instruction-banner" class="info-bar inset-panel">
+      Click a part of the machine, then choose a color from the palette to customize your gacha machine.
+    </div>
 
-      <!-- Windows material selector -->
-      <div id="windows-material-selector">
-        <h3>Windows</h3>
-        <label class="windows-option">
-          <input type="radio" name="windows-material" value="printed" id="windows-printed" checked />
-          3D printed windows
-        </label>
-        <label class="windows-option">
-          <input type="radio" name="windows-material" value="acrylic" id="windows-acrylic" />
-          Clear acrylic windows
-        </label>
+    <aside id="sidebar" class="window-panel">
+      <h2 class="panel-titlebar">Parts</h2>
+      <div class="panel-body">
+        <ul id="parts-list"></ul>
+
+        <div id="windows-material-selector" class="group-box">
+          <h3>Windows</h3>
+          <label class="windows-option">
+            <input type="radio" name="windows-material" value="printed" id="windows-printed" checked />
+            <span>3D printed windows</span>
+          </label>
+          <label class="windows-option">
+            <input type="radio" name="windows-material" value="acrylic" id="windows-acrylic" />
+            <span>Clear acrylic windows</span>
+          </label>
+        </div>
       </div>
     </aside>
 
-    <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
-    <div id="viewer-wrap">
-      <div id="view-selector" role="tablist" aria-label="Machine view selector">
-        <button class="view-tab active" type="button" data-view="front" role="tab" aria-selected="true">
-          Front
-        </button>
-        <button class="view-tab" type="button" data-view="side" role="tab" aria-selected="false">
-          Side
-        </button>
-        <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">
-          Back
-        </button>
-      </div>
-      <div id="viewer-stage">
-        <div id="viewer">
-          <p style="color:#8892a4;font-size:0.9rem;">Loading machine preview…</p>
+    <section id="viewer-wrap" class="window-panel">
+      <h2 class="panel-titlebar">Machine Preview</h2>
+      <div class="panel-body viewer-panel-body">
+        <div class="viewer-toolbar">
+          <div id="view-selector" role="tablist" aria-label="Machine view selector">
+            <button class="view-tab active" type="button" data-view="front" role="tab" aria-selected="true">Front</button>
+            <button class="view-tab" type="button" data-view="side" role="tab" aria-selected="false">Side</button>
+            <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">Back</button>
+          </div>
+          <div id="zoom-controls" class="group-box group-box-inline" aria-label="Preview zoom controls">
+            <span class="group-box-label">Zoom</span>
+            <button id="btn-zoom-in" class="btn zoom-btn" type="button" aria-label="Zoom in">+</button>
+            <button id="btn-zoom-out" class="btn zoom-btn" type="button" aria-label="Zoom out">−</button>
+            <button id="btn-zoom-reset" class="btn zoom-btn zoom-reset" type="button">Reset</button>
+          </div>
+        </div>
+        <div id="viewer-stage" class="inset-panel">
+          <div id="viewer">
+            <p class="loading-copy">Loading machine preview…</p>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- ── Color palette panel ────────────────────────────────────────── -->
-    <section id="palette-panel">
-      <h2>Bambu PLA Colors</h2>
-      <div id="selected-info">
-        <span id="selected-color"></span>
-      </div>
-      <div id="palette-scroll">
-        <div id="palette-grid"></div>
-      </div>
-      <div id="color-name"></div>
     </section>
 
-    <!-- ── Footer ─────────────────────────────────────────────────────── -->
-    <footer>
-      <span>Lightning Bug Club &mdash; <a href="https://lightningbugclub.com" target="_blank" rel="noopener">lightningbugclub.com</a></span>
-      <span>Phase 1: 2D Orthographic &mdash; Phase 2: Three.js 3D (roadmap)</span>
-    </footer>
+    <section id="palette-panel" class="window-panel">
+      <h2 class="panel-titlebar">Bambu PLA Colors</h2>
+      <div class="panel-body">
+        <div id="selected-info" class="inset-panel">
+          <span id="selected-color"></span>
+        </div>
+        <div id="palette-scroll" class="inset-panel">
+          <div id="palette-grid"></div>
+        </div>
+        <div id="color-name"></div>
+      </div>
+    </section>
 
+    <footer>
+      <span>Lightning Bug Club — <a href="https://lightningbugclub.com" target="_blank" rel="noopener">lightningbugclub.com</a></span>
+      <span>Phase 1: 2D Orthographic — Phase 2: Three.js 3D (roadmap)</span>
+    </footer>
   </div>
 
-  <!-- App entry point (ES module) -->
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
