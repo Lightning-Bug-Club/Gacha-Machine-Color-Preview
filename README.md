@@ -52,7 +52,7 @@ Below the parts list is a **Windows** section with two options:
 | **3D printed windows** (default) | The user can pick a PLA color for the windows. Windows appear at **80% opacity** in the **Side view only**, visually covering the hole-blocker, main-gear, and mid-plate regions. Windows are never shown in Front or Back views. |
 | **Clear acrylic windows** | Windows are fully transparent — no overlay is shown. The window color picker is disabled. |
 
-> **Note:** The finalized SVGs currently contain no window geometry. Windows are **simulated** as a rounded-rectangle overlay in the side view, marked with an HTML comment for future replacement with real artwork.
+> **Note:** The finalized SVGs currently contain no window geometry. Windows are **simulated** as a rounded-rectangle overlay in the side view. On load, the overlay is **automatically sized** to the union bounding box of the hole-blocker, main-gear, and mid-plate regions (plus a small padding), so it precisely covers those parts regardless of SVG scaling. The default window color is **Basic PLA Cyan** (`basic-pla-cyan`), which is applied on first load even before the user selects a color.
 
 ### Shareable URL
 
