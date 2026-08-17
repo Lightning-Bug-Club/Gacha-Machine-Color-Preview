@@ -4,17 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gata-Gata Gacha Machine — Color Customizer</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="src/styles.css" />
 
-  <!-- jsPDF via CDN (no bundler required for Phase 1) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
-          crossorigin="anonymous"></script>
+  <script src="src/vendor/jspdf.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
 
     <!-- ── Header ─────────────────────────────────────────────────────── -->
-    <header>
+  <header class="app-chrome">
       <h1>⚙️ Gata-Gata Gacha Machine — Color Customizer</h1>
       <div class="header-actions">
         <button id="btn-share" class="btn btn-secondary" title="Copy shareable link">
@@ -26,8 +25,12 @@
       </div>
     </header>
 
+    <div id="instruction-banner" class="info-banner" role="note">
+      Click a part of the machine, then choose a color from the palette to customize your gacha machine.
+    </div>
+
     <!-- ── Parts sidebar ──────────────────────────────────────────────── -->
-    <aside id="sidebar">
+    <aside id="sidebar" class="panel-window">
       <h2>Parts</h2>
       <ul id="parts-list"></ul>
 
@@ -46,17 +49,25 @@
     </aside>
 
     <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
-    <div id="viewer-wrap">
-      <div id="view-selector" role="tablist" aria-label="Machine view selector">
-        <button class="view-tab active" type="button" data-view="front" role="tab" aria-selected="true">
-          Front
-        </button>
-        <button class="view-tab" type="button" data-view="side" role="tab" aria-selected="false">
-          Side
-        </button>
-        <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">
-          Back
-        </button>
+    <div id="viewer-wrap" class="panel-window">
+      <h2>Machine Preview</h2>
+      <div class="viewer-toolbar">
+        <div id="view-selector" role="tablist" aria-label="Machine view selector">
+          <button class="view-tab active" type="button" data-view="front" role="tab" aria-selected="true">
+            Front
+          </button>
+          <button class="view-tab" type="button" data-view="side" role="tab" aria-selected="false">
+            Side
+          </button>
+          <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">
+            Back
+          </button>
+        </div>
+        <div id="zoom-controls" aria-label="Preview zoom controls">
+          <button id="btn-zoom-in" class="btn zoom-btn" type="button" title="Zoom in">+</button>
+          <button id="btn-zoom-out" class="btn zoom-btn" type="button" title="Zoom out">−</button>
+          <button id="btn-zoom-reset" class="btn zoom-btn zoom-reset" type="button" title="Reset zoom">Reset</button>
+        </div>
       </div>
       <div id="viewer-stage">
         <div id="viewer">
@@ -66,7 +77,7 @@
     </div>
 
     <!-- ── Color palette panel ────────────────────────────────────────── -->
-    <section id="palette-panel">
+    <section id="palette-panel" class="panel-window">
       <h2>Bambu PLA Colors</h2>
       <div id="selected-info">
         <span id="selected-color"></span>
@@ -78,7 +89,7 @@
     </section>
 
     <!-- ── Footer ─────────────────────────────────────────────────────── -->
-    <footer>
+    <footer class="app-chrome">
       <span>Lightning Bug Club &mdash; <a href="https://lightningbugclub.com" target="_blank" rel="noopener">lightningbugclub.com</a></span>
       <span>Phase 1: 2D Orthographic &mdash; Phase 2: Three.js 3D (roadmap)</span>
     </footer>

@@ -4,31 +4,10 @@
  * Phase 1: 2D orthographic viewer.
  * Phase 2: Replace this file with viewer3d.js (Three.js). All other modules
  *          (state, palette, parts, pdf) remain unchanged.
- *
- * LAYER NORMALIZATION:
- *   On load, each finalized SVG's layer <g> elements (identified by id) are
- *   mapped to logical part ids via LAYER_ID_MAP, and a data-part attribute is
- *   added so the [data-part] recolor engine works uniformly across all views.
- *
- * SPECIAL LAYERS (not user-selectable):
- *   Top_Chamber_x5F_Inside      → always white (#FFFFFF)
- *   Top_Chamber_x5F_Inside_x5F_Back → always mirrors Top Chamber user color
- *   Black                       → always #565656
- *
- * LINKED PARTS:
- *   Bottom_Plate__x26__Mouth contains two sub-groups; both receive
- *   data-part="bottom-plate-mouth" so they recolor as one logical part.
- *
- * WINDOWS:
- *   The simulated window overlay in machine-side.svg carries data-part="window".
- *   Visibility (opacity) is controlled by _applyState based on windowsMaterial.
- *   Windows are only shown in the side view; ignored in front/back.
  */
 
 import { subscribe, setSelectedPart, getState } from './state.js';
 
-// Finalized SVG layer id → logical part id
-// Illustrator encodes special chars: _ becomes x5F, & becomes x26_, . and space stay
 const LAYER_ID_MAP = {
   'Bottom_Chamber':               'bottom-chamber',
   'Bottom_Plate__x26__Mouth':     'bottom-plate-mouth',
@@ -45,31 +24,37 @@ const LAYER_ID_MAP = {
   'Back_Cover':                   'back-cover',
   'Rear_Lock_Knob':               'rear-lock-knob',
   'Lid':                          'lid',
-  'Window_Overlay':               'window',   // simulated window in machine-side.svg
+  'Window_Overlay':               'window',
 };
 
-// These layers are NOT user-selectable; they get special fixed/follower treatment
 const FIXED_LAYERS = {
-  'Top_Chamber_x5F_Inside':           '#FFFFFF', // always white
-  'Top_Chamber_x5F_Inside_x5F_Back':  null,      // null = mirrors top-chamber color
-  'Black':                             '#565656', // always gray
+  'Top_Chamber_x5F_Inside': '#FFFFFF',
+  'Top_Chamber_x5F_Inside_x5F_Back': null,
+  'Black': '#565656',
 };
 
 const VIEW_PATHS = {
   front: './assets/machine-front.svg',
-  side:  './assets/machine-side.svg',
-  back:  './assets/machine-back.svg',
+  side: './assets/machine-side.svg',
+  back: './assets/machine-back.svg',
 };
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 5;
+const ZOOM_STEP = 1.2;
+const DRAG_THRESHOLD_PX = 4;
+const DEFAULT_WINDOW_COLOR_ID = 'basic-pla-jade-white';
+const SHAPE_SELECTOR = 'path, polygon, polyline, rect, circle, ellipse, line';
 
 let _svgRoot = null;
 let _containerEl = null;
 let _currentView = 'front';
 let _unsubscribe = null;
+let _defaultViewBox = null;
+let _sessionViewBox = null;
+let _dragState = null;
+let _suppressPartClick = false;
 
-/**
- * Load and inject the layered SVG into `containerEl`.
- * Returns a promise that resolves once the SVG is in the DOM.
- */
 export async function initViewer(containerEl, viewName = 'front') {
   _containerEl = containerEl;
   if (!_unsubscribe) {
@@ -78,90 +63,199 @@ export async function initViewer(containerEl, viewName = 'front') {
   return setCurrentView(viewName);
 }
 
-/**
- * Swap the visible SVG view while keeping the same shared part-color state.
- */
 export async function setCurrentView(viewName) {
   const nextView = VIEW_PATHS[viewName] ? viewName : 'front';
   if (!_containerEl) throw new Error('Viewer container is not initialized.');
 
-  const res = await fetch(VIEW_PATHS[nextView]);
-  if (!res.ok) throw new Error(`Failed to load ${nextView} SVG: ${res.status}`);
-  const svgText = await res.text();
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(svgText, 'image/svg+xml');
-  const svgEl = doc.querySelector('svg');
-  if (!svgEl) throw new Error(`Invalid ${nextView} SVG: no <svg> root element found.`);
-
-  svgEl.removeAttribute('width');
-  svgEl.removeAttribute('height');
-  svgEl.setAttribute('width', '100%');
-  svgEl.setAttribute('height', '100%');
-
-  // Normalize finalized layer ids → data-part attributes
+  const svgEl = await _loadViewSVG(nextView);
   _normalizeLayers(svgEl);
 
   _containerEl.innerHTML = '';
   _containerEl.appendChild(svgEl);
+
   _svgRoot = svgEl;
   _currentView = nextView;
+  _defaultViewBox = _readViewBox(svgEl);
+  _applyViewBox(svgEl, _sessionViewBox || _defaultViewBox);
 
-  // Wire click-to-select on colorable parts
-  _svgRoot.querySelectorAll('[data-part]').forEach(el => {
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      const partId = el.getAttribute('data-part');
-      setSelectedPart(partId);
-    });
-  });
+  _wireInteractiveViewport(svgEl);
+  _wirePartSelection(svgEl);
 
-  // Auto-fit window overlay to covered parts (side view only, requires DOM layout)
   if (nextView === 'side') {
-    _fitWindowOverlay(svgEl);
+    await _fitWindowOverlay(svgEl);
   }
 
   _applyState(getState());
   return svgEl;
 }
 
-/**
- * Walk the freshly parsed SVG and map finalized layer <g id="..."> elements to
- * data-part attributes so the [data-part] engine can target them.
- * Also tags fixed/follower layers for special treatment in _applyState.
- */
+export async function createPreviewSVG(viewName, state = getState()) {
+  const nextView = VIEW_PATHS[viewName] ? viewName : 'front';
+  const svgEl = await _loadViewSVG(nextView);
+  _normalizeLayers(svgEl);
+
+  const holder = document.createElement('div');
+  holder.style.position = 'absolute';
+  holder.style.left = '-99999px';
+  holder.style.top = '0';
+  holder.style.width = '1224px';
+  holder.style.height = '792px';
+  holder.style.overflow = 'hidden';
+  holder.style.pointerEvents = 'none';
+  holder.setAttribute('aria-hidden', 'true');
+
+  document.body.appendChild(holder);
+  holder.appendChild(svgEl);
+
+  try {
+    const viewBox = _readViewBox(svgEl);
+    svgEl.setAttribute('width', String(viewBox.width));
+    svgEl.setAttribute('height', String(viewBox.height));
+    svgEl.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+
+    if (nextView === 'side') {
+      await _fitWindowOverlay(svgEl);
+    }
+
+    _applyStateToSVG(svgEl, { ...state, selectedPartId: null }, nextView);
+    return svgEl;
+  } finally {
+    holder.remove();
+  }
+}
+
+export function zoomIn() {
+  if (!_svgRoot || !_defaultViewBox) return;
+  _zoomAboutSvgPoint(_svgRoot, 1 / ZOOM_STEP, 0.5, 0.5);
+}
+
+export function zoomOut() {
+  if (!_svgRoot || !_defaultViewBox) return;
+  _zoomAboutSvgPoint(_svgRoot, ZOOM_STEP, 0.5, 0.5);
+}
+
+export function resetViewTransform() {
+  if (!_svgRoot || !_defaultViewBox) return;
+  _applyViewBox(_svgRoot, _defaultViewBox);
+}
+
 function _normalizeLayers(svgEl) {
   let windowOverlayEl = null;
 
-  // Iterate top-level <g> elements (the Illustrator layers)
   svgEl.querySelectorAll(':scope > g[id]').forEach(g => {
     const rawId = g.getAttribute('id');
-
     if (LAYER_ID_MAP[rawId]) {
       g.setAttribute('data-part', LAYER_ID_MAP[rawId]);
       if (rawId === 'Window_Overlay') windowOverlayEl = g;
-    } else if (FIXED_LAYERS.hasOwnProperty(rawId)) {
-      // Mark these so _applyState can find them
+    } else if (Object.prototype.hasOwnProperty.call(FIXED_LAYERS, rawId)) {
       g.setAttribute('data-fixed-layer', rawId);
     }
   });
 
-  // Guarantee window overlay is drawn on top (last child = highest z-order)
   if (windowOverlayEl && svgEl.lastElementChild !== windowOverlayEl) {
     svgEl.appendChild(windowOverlayEl);
   }
 }
 
-/**
- * Compute the union bounding box of hole-blocker, main-gear, and mid-plate in the
- * side view, then resize the Window_Overlay rect to cover that area (plus padding).
- * Must be called after the SVG is appended to the live DOM so getBBox() works.
- */
-function _fitWindowOverlay(svgEl) {
-  const PADDING = 6; // user units of extra coverage on each side
-  const CORNER_RADIUS = 8;
-  const FALLBACK = { x: 476, y: 155, width: 230, height: 240 }; // original hardcoded values
+function _wirePartSelection(svgEl) {
+  svgEl.querySelectorAll('[data-part]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', e => {
+      if (_suppressPartClick) {
+        e.preventDefault();
+        e.stopPropagation();
+        _suppressPartClick = false;
+        return;
+      }
+      e.stopPropagation();
+      setSelectedPart(el.getAttribute('data-part'));
+    });
+  });
+}
+
+function _wireInteractiveViewport(svgEl) {
+  svgEl.style.touchAction = 'none';
+
+  svgEl.addEventListener('wheel', e => {
+    if (!_defaultViewBox) return;
+    e.preventDefault();
+
+    const current = _readViewBox(svgEl);
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const ratioX = (e.clientX - rect.left) / rect.width;
+    const ratioY = (e.clientY - rect.top) / rect.height;
+    const factor = e.deltaY < 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+    const targetWidth = current.width * factor;
+
+    _zoomTo(svgEl, targetWidth, ratioX, ratioY);
+  }, { passive: false });
+
+  svgEl.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !_isZoomedIn(svgEl)) return;
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    _dragState = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startViewBox: _readViewBox(svgEl),
+      moved: false,
+    };
+
+    _suppressPartClick = false;
+    svgEl.setPointerCapture(e.pointerId);
+    svgEl.classList.add('is-panning');
+  });
+
+  svgEl.addEventListener('pointermove', e => {
+    if (!_dragState || e.pointerId !== _dragState.pointerId || !_defaultViewBox) return;
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const dx = e.clientX - _dragState.startX;
+    const dy = e.clientY - _dragState.startY;
+    if (!_dragState.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+      _dragState.moved = true;
+      _suppressPartClick = true;
+    }
+
+    const scaleX = _dragState.startViewBox.width / rect.width;
+    const scaleY = _dragState.startViewBox.height / rect.height;
+    _applyViewBox(svgEl, {
+      x: _dragState.startViewBox.x - dx * scaleX,
+      y: _dragState.startViewBox.y - dy * scaleY,
+      width: _dragState.startViewBox.width,
+      height: _dragState.startViewBox.height,
+    });
+  });
+
+  const endDrag = e => {
+    if (!_dragState || (_dragState.pointerId !== null && e.pointerId !== _dragState.pointerId)) return;
+    if (svgEl.hasPointerCapture?.(e.pointerId)) {
+      svgEl.releasePointerCapture(e.pointerId);
+    }
+    if (_dragState.moved) {
+      setTimeout(() => { _suppressPartClick = false; }, 0);
+    } else {
+      _suppressPartClick = false;
+    }
+    svgEl.classList.remove('is-panning');
+    _dragState = null;
+  };
+
+  svgEl.addEventListener('pointerup', endDrag);
+  svgEl.addEventListener('pointercancel', endDrag);
+  svgEl.addEventListener('lostpointercapture', () => {
+    svgEl.classList.remove('is-panning');
+    _dragState = null;
+  });
+}
+
+async function _fitWindowOverlay(svgEl) {
+  await _waitForLayout();
 
   const overlayGroup = svgEl.querySelector('[data-part="window"]');
   if (!overlayGroup) return;
@@ -169,96 +263,103 @@ function _fitWindowOverlay(svgEl) {
   const overlayRect = overlayGroup.querySelector('rect');
   if (!overlayRect) return;
 
-  // Collect bboxes from target parts; guard against missing elements or getBBox errors
+  const box = _getTopChamberInsideBox(svgEl) || _getLegacyWindowBox(svgEl) || {
+    x: 476,
+    y: 155,
+    width: 230,
+    height: 240,
+  };
+
+  overlayRect.setAttribute('x', box.x);
+  overlayRect.setAttribute('y', box.y);
+  overlayRect.setAttribute('width', box.width);
+  overlayRect.setAttribute('height', box.height);
+  overlayRect.setAttribute('rx', '8');
+  overlayRect.setAttribute('ry', '8');
+}
+
+function _getTopChamberInsideBox(svgEl) {
+  const insideEl = svgEl.querySelector('[data-fixed-layer="Top_Chamber_x5F_Inside"], #Top_Chamber_x5F_Inside');
+  if (!insideEl) return null;
+
+  try {
+    const bbox = insideEl.getBBox();
+    if (bbox.width > 0 && bbox.height > 0) {
+      return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height };
+    }
+  } catch (_) {
+    return null;
+  }
+
+  return null;
+}
+
+function _getLegacyWindowBox(svgEl) {
   const targetParts = ['hole-blocker', 'main-gear', 'mid-plate'];
   let union = null;
+
   targetParts.forEach(partId => {
     const el = svgEl.querySelector(`[data-part="${partId}"]`);
     if (!el) return;
     try {
       const bb = el.getBBox();
-      if (bb.width === 0 && bb.height === 0) return;
+      if (!bb.width && !bb.height) return;
       if (!union) {
         union = { x: bb.x, y: bb.y, x2: bb.x + bb.width, y2: bb.y + bb.height };
       } else {
-        union.x  = Math.min(union.x,  bb.x);
-        union.y  = Math.min(union.y,  bb.y);
+        union.x = Math.min(union.x, bb.x);
+        union.y = Math.min(union.y, bb.y);
         union.x2 = Math.max(union.x2, bb.x + bb.width);
         union.y2 = Math.max(union.y2, bb.y + bb.height);
       }
-    } catch (_) { /* element not rendered yet — skip */ }
+    } catch (_) {
+      // Ignore missing/non-rendered elements and continue to the fallback.
+    }
   });
 
-  const box = union
-    ? { x: union.x - PADDING, y: union.y - PADDING,
-        width: union.x2 - union.x + PADDING * 2,
-        height: union.y2 - union.y + PADDING * 2 }
-    : FALLBACK;
+  if (!union) return null;
 
-  overlayRect.setAttribute('x',      box.x);
-  overlayRect.setAttribute('y',      box.y);
-  overlayRect.setAttribute('width',  box.width);
-  overlayRect.setAttribute('height', box.height);
-  overlayRect.setAttribute('rx',     CORNER_RADIUS);
-  overlayRect.setAttribute('ry',     CORNER_RADIUS);
+  return {
+    x: union.x - 6,
+    y: union.y - 6,
+    width: union.x2 - union.x + 12,
+    height: union.y2 - union.y + 12,
+  };
 }
 
-/**
- * Apply color and selection highlight from the current state snapshot to the SVG.
- * Called automatically on every state change via subscribe().
- */
 function _applyState(state) {
-  if (!_svgRoot) return;
+  _applyStateToSVG(_svgRoot, state, _currentView);
+}
+
+function _applyStateToSVG(svgRoot, state, viewName) {
+  if (!svgRoot) return;
 
   const topChamberHex = state.selections['top-chamber']
     ? _resolveHex(state.selections['top-chamber'])
     : null;
 
-  // ── Colorable parts (user-selectable) ──────────────────────────────────
-  _svgRoot.querySelectorAll('[data-part]').forEach(el => {
+  svgRoot.querySelectorAll('[data-part]').forEach(el => {
     const partId = el.getAttribute('data-part');
 
-    // Windows: visibility controlled by windowsMaterial + current view
     if (partId === 'window') {
-      const show = _currentView === 'side' && state.windowsMaterial === 'printed';
+      const show = viewName === 'side' && state.windowsMaterial === 'printed';
       el.style.display = show ? '' : 'none';
       if (show) {
         el.setAttribute('opacity', '0.8');
-        const colorId = state.selections['window'];
-        // Use selection color, or fall back to basic-pla-cyan default
-        const hex = colorId ? _resolveHex(colorId) : _resolveHex('basic-pla-cyan');
-        _setFillRecursive(el, hex);
+        _setFillRecursive(el, _resolveHex(state.selections.window || DEFAULT_WINDOW_COLOR_ID));
+        _setStrokeStateRecursive(el, state.selectedPartId === partId);
       }
-      // Don't fall through to selection highlight for windows
       return;
     }
 
-    // Recolor
-    const colorId = state.selections[partId];
-    if (colorId) {
-      _setFillRecursive(el, _resolveHex(colorId));
+    if (state.selections[partId]) {
+      _setFillRecursive(el, _resolveHex(state.selections[partId]));
     }
 
-    // Selection highlight
-    if (partId === state.selectedPartId) {
-      el.setAttribute('stroke', '#FFD700');
-      el.setAttribute('stroke-width', '4');
-      el.setAttribute('filter', 'drop-shadow(0 0 6px rgba(255,215,0,0.8))');
-    } else {
-      el.removeAttribute('filter');
-      const original = el.getAttribute('data-original-stroke');
-      if (original !== null) {
-        el.setAttribute('stroke', original);
-        el.setAttribute('stroke-width', el.getAttribute('data-original-stroke-width') || '1');
-      } else {
-        el.setAttribute('data-original-stroke', el.getAttribute('stroke') || '');
-        el.setAttribute('data-original-stroke-width', el.getAttribute('stroke-width') || '1');
-      }
-    }
+    _setStrokeStateRecursive(el, state.selectedPartId === partId);
   });
 
-  // ── Fixed / follower layers ─────────────────────────────────────────────
-  _svgRoot.querySelectorAll('[data-fixed-layer]').forEach(el => {
+  svgRoot.querySelectorAll('[data-fixed-layer]').forEach(el => {
     const rawId = el.getAttribute('data-fixed-layer');
     if (rawId === 'Top_Chamber_x5F_Inside') {
       _setFillRecursive(el, '#FFFFFF');
@@ -270,11 +371,6 @@ function _applyState(state) {
   });
 }
 
-/**
- * Set fill on a group element and all its descendant shape children.
- * Uses inline style so it overrides CSS class-based fills (the finalized SVGs
- * use Illustrator's .stN CSS classes for default fills; inline style wins).
- */
 function _setFillRecursive(el, hex) {
   if (el.tagName === 'g' || el.tagName === 'G') {
     el.querySelectorAll('path, polygon, polyline, rect, circle, ellipse').forEach(shape => {
@@ -285,10 +381,35 @@ function _setFillRecursive(el, hex) {
   }
 }
 
-/**
- * Resolve a colorId to a hex string.
- * Accepts either "#RRGGBB" or a color id from the palette.
- */
+function _setStrokeStateRecursive(el, isSelected) {
+  const shapes = el.matches?.(SHAPE_SELECTOR) ? [el] : Array.from(el.querySelectorAll(SHAPE_SELECTOR));
+  shapes.forEach(shape => {
+    if (!shape.dataset.originalStroke) {
+      const computed = typeof window !== 'undefined' && window.getComputedStyle
+        ? window.getComputedStyle(shape)
+        : null;
+      shape.dataset.originalStroke = shape.getAttribute('stroke') || computed?.stroke || '';
+      shape.dataset.originalStrokeWidth = shape.getAttribute('stroke-width') || computed?.strokeWidth || '';
+    }
+
+    const originalStroke = shape.dataset.originalStroke;
+    const originalWidth = parseFloat(shape.dataset.originalStrokeWidth || '0');
+    const fallbackStroke = originalStroke && originalStroke !== 'none' ? originalStroke : '#000000';
+    const fallbackWidth = originalWidth > 0 ? originalWidth : 1.5;
+
+    shape.style.vectorEffect = 'non-scaling-stroke';
+    shape.style.paintOrder = 'stroke fill markers';
+    shape.style.stroke = isSelected ? '#FFD700' : fallbackStroke;
+    shape.style.strokeWidth = String(isSelected ? Math.max(3, fallbackWidth * 1.75) : fallbackWidth);
+  });
+
+  if (isSelected) {
+    el.setAttribute('filter', 'drop-shadow(0 0 6px rgba(255,215,0,0.8))');
+  } else {
+    el.removeAttribute('filter');
+  }
+}
+
 function _resolveHex(colorId) {
   if (/^#[0-9a-fA-F]{3,6}$/.test(colorId)) return colorId;
   if (window.__paletteMap) {
@@ -298,9 +419,108 @@ function _resolveHex(colorId) {
   return colorId;
 }
 
-/**
- * Recolor a specific part directly by hex (used internally and for testing).
- */
+async function _loadViewSVG(viewName) {
+  const res = await fetch(VIEW_PATHS[viewName]);
+  if (!res.ok) throw new Error(`Failed to load ${viewName} SVG: ${res.status}`);
+
+  const svgText = await res.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, 'image/svg+xml');
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl) throw new Error(`Invalid ${viewName} SVG: no <svg> root element found.`);
+
+  svgEl.removeAttribute('width');
+  svgEl.removeAttribute('height');
+  svgEl.setAttribute('width', '100%');
+  svgEl.setAttribute('height', '100%');
+  return svgEl;
+}
+
+function _zoomAboutSvgPoint(svgEl, factor, ratioX, ratioY) {
+  const current = _readViewBox(svgEl);
+  const focusX = current.x + current.width * ratioX;
+  const focusY = current.y + current.height * ratioY;
+  _zoomTo(svgEl, current.width * factor, ratioX, ratioY, focusX, focusY);
+}
+
+function _zoomTo(svgEl, targetWidth, ratioX, ratioY, focusX = null, focusY = null) {
+  if (!_defaultViewBox) return;
+
+  const boundedWidth = Math.min(
+    _defaultViewBox.width / MIN_ZOOM,
+    Math.max(_defaultViewBox.width / MAX_ZOOM, targetWidth)
+  );
+  const boundedHeight = boundedWidth * (_defaultViewBox.height / _defaultViewBox.width);
+
+  const current = _readViewBox(svgEl);
+  const anchorX = focusX ?? (current.x + current.width * ratioX);
+  const anchorY = focusY ?? (current.y + current.height * ratioY);
+
+  _applyViewBox(svgEl, {
+    x: anchorX - boundedWidth * ratioX,
+    y: anchorY - boundedHeight * ratioY,
+    width: boundedWidth,
+    height: boundedHeight,
+  });
+}
+
+function _applyViewBox(svgEl, nextViewBox) {
+  if (!_defaultViewBox) {
+    _defaultViewBox = _readViewBox(svgEl);
+  }
+
+  const clamped = _clampViewBox(nextViewBox, _defaultViewBox);
+  svgEl.setAttribute('viewBox', `${clamped.x} ${clamped.y} ${clamped.width} ${clamped.height}`);
+  _sessionViewBox = { ...clamped };
+}
+
+function _clampViewBox(box, bounds) {
+  const width = Math.min(bounds.width / MIN_ZOOM, Math.max(bounds.width / MAX_ZOOM, box.width));
+  const height = width * (bounds.height / bounds.width);
+
+  let x = box.x;
+  let y = box.y;
+
+  if (width >= bounds.width) {
+    x = bounds.x - (width - bounds.width) / 2;
+  } else {
+    x = Math.min(bounds.x + bounds.width - width, Math.max(bounds.x, x));
+  }
+
+  if (height >= bounds.height) {
+    y = bounds.y - (height - bounds.height) / 2;
+  } else {
+    y = Math.min(bounds.y + bounds.height - height, Math.max(bounds.y, y));
+  }
+
+  return { x, y, width, height };
+}
+
+function _readViewBox(svgEl) {
+  const raw = svgEl.getAttribute('viewBox');
+  if (raw) {
+    const [x, y, width, height] = raw.split(/\s+/).map(Number);
+    return { x, y, width, height };
+  }
+
+  const baseVal = svgEl.viewBox?.baseVal;
+  return {
+    x: baseVal?.x || 0,
+    y: baseVal?.y || 0,
+    width: baseVal?.width || 1224,
+    height: baseVal?.height || 792,
+  };
+}
+
+function _isZoomedIn(svgEl) {
+  const current = _readViewBox(svgEl);
+  return current.width < (_defaultViewBox?.width || current.width) - 0.5;
+}
+
+function _waitForLayout() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
 export function recolorPart(partId, hex) {
   if (!_svgRoot) return;
   _svgRoot.querySelectorAll(`[data-part="${partId}"]`).forEach(el => {
@@ -308,9 +528,6 @@ export function recolorPart(partId, hex) {
   });
 }
 
-/**
- * Return the SVG DOM element (for pdf.js serialization).
- */
 export function getSVGElement() {
   return _svgRoot;
 }

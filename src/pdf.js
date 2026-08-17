@@ -1,33 +1,15 @@
 /**
  * pdf.js — PDF blueprint export.
- *
- * Uses jsPDF (loaded via CDN in index.html) to generate a "Build Blueprint" PDF.
- * Decoupled from the viewer: accepts a preview image (data URL) + config state,
- * so the future Three.js viewer (Phase 2) can reuse it by providing a WebGL
- * canvas screenshot instead.
- *
- * Usage:
- *   import { exportPDF } from './pdf.js';
- *   await exportPDF({
- *     previewDataURL,   // PNG/JPEG data URL of the machine preview
- *     selections,       // { partId: colorId }
- *     parts,            // array from parts.js
- *     colors,           // array from palette.js
- *   });
  */
 
-/**
- * Export a PDF blueprint.
- * @param {Object} opts
- * @param {string}   opts.previewDataURL   - Data URL of the recolored preview image
- * @param {Object}   opts.selections       - { partId: colorId }
- * @param {string}   opts.windowsMaterial  - 'printed' | 'acrylic'
- * @param {Array}    opts.parts            - Parts array [{ id, label, defaultColorId }]
- * @param {Array}    opts.colors           - Colors array [{ id, name, hex, series, url }]
- */
-export async function exportPDF({ previewDataURL, selections, windowsMaterial = 'printed', parts, colors }) {
-  // jsPDF is loaded globally via CDN; if it is missing, fail loudly so main.js
-  // can show a user-visible message instead of the export button failing silently.
+export async function exportPDF({
+  previewDataURLs = null,
+  previewDataURL = null,
+  selections,
+  windowsMaterial = 'printed',
+  parts,
+  colors,
+}) {
   const jsPDF = window.jspdf?.jsPDF;
   if (!jsPDF) {
     throw new Error('PDF export is unavailable because jsPDF did not load. Refresh the page and try again.');
@@ -35,10 +17,14 @@ export async function exportPDF({ previewDataURL, selections, windowsMaterial = 
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PAGE_W = 210;
+  const PAGE_H = 297;
   const MARGIN = 14;
   const CONTENT_W = PAGE_W - MARGIN * 2;
+  const TABLE_ROW_H = 8;
+  const TABLE_HEADER_TOP_H = 5;
+  const TABLE_HEADER_SUB_H = 5;
+  const TABLE_HEADER_H = TABLE_HEADER_TOP_H + TABLE_HEADER_SUB_H;
 
-  // ── Title ────────────────────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.text('Gata-Gata Gacha Machine — Build Blueprint', MARGIN, 20);
@@ -49,155 +35,230 @@ export async function exportPDF({ previewDataURL, selections, windowsMaterial = 
   doc.text(`Generated: ${new Date().toLocaleString()}`, MARGIN, 27);
   doc.setTextColor(0);
 
-  // ── Preview image ────────────────────────────────────────────────────────
   let yPos = 34;
-  if (previewDataURL) {
-    const imgW = 90;
-    const imgH = 110;
-    const imgX = (PAGE_W - imgW) / 2;
-    doc.addImage(previewDataURL, 'PNG', imgX, yPos, imgW, imgH);
-    yPos += imgH + 8;
+  const previewSlots = _normalizePreviewSlots(previewDataURLs, previewDataURL);
+  if (previewSlots.length) {
+    yPos = await _drawPreviewRow(doc, previewSlots, {
+      pageWidth: PAGE_W,
+      margin: MARGIN,
+      contentWidth: CONTENT_W,
+      yPos,
+    });
   }
 
-  // ── Legend table ─────────────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text('Parts & Colors', MARGIN, yPos);
   yPos += 6;
 
-  // Build color lookup map
   const colorMap = {};
-  colors.forEach(c => { colorMap[c.id] = c; });
+  colors.forEach(color => { colorMap[color.id] = color; });
 
-  // Table header
-  const COL_PART   = MARGIN;
-  const COL_COLOR  = MARGIN + 60;
-  const COL_HEX    = MARGIN + 110;
-  const COL_URL    = MARGIN + 135;
-  const ROW_H      = 8;
+  const columns = {
+    part: { x: MARGIN, width: 62 },
+    color: { x: MARGIN + 62, width: 64 },
+    hex: { x: MARGIN + 126, width: 21 },
+    bitty: { x: MARGIN + 147, width: 17.5 },
+    biggy: { x: MARGIN + 164.5, width: 17.5 },
+  };
 
-  doc.setFillColor(50, 50, 50);
-  doc.rect(MARGIN, yPos, CONTENT_W, ROW_H, 'F');
-  doc.setTextColor(255);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Part',        COL_PART  + 1, yPos + 5.5);
-  doc.text('Bambu Color', COL_COLOR + 1, yPos + 5.5);
-  doc.text('Hex',         COL_HEX   + 1, yPos + 5.5);
-  doc.text('Product URL', COL_URL   + 1, yPos + 5.5);
-  yPos += ROW_H;
-  doc.setTextColor(0);
-  doc.setFont('helvetica', 'normal');
+  const drawTableHeader = (topY, continued = false) => {
+    if (continued) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text('Parts & Colors (continued)', MARGIN, topY);
+      topY += 6;
+    }
 
-  // Table rows
+    doc.setFillColor(50, 50, 50);
+    doc.rect(MARGIN, topY, CONTENT_W, TABLE_HEADER_TOP_H, 'F');
+    doc.rect(MARGIN, topY + TABLE_HEADER_TOP_H, CONTENT_W, TABLE_HEADER_SUB_H, 'F');
+
+    doc.setDrawColor(210);
+    doc.rect(MARGIN, topY, CONTENT_W, TABLE_HEADER_H, 'S');
+    [
+      columns.part.x,
+      columns.color.x,
+      columns.hex.x,
+      columns.bitty.x,
+      columns.biggy.x,
+      MARGIN + CONTENT_W,
+    ].forEach(x => doc.line(x, topY, x, topY + TABLE_HEADER_H));
+    doc.line(MARGIN, topY + TABLE_HEADER_TOP_H, MARGIN + CONTENT_W, topY + TABLE_HEADER_TOP_H);
+
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('Part', columns.part.x + 1, topY + 6.8);
+    doc.text('Bambu Color', columns.color.x + 1, topY + 6.8);
+    doc.text('Hex', columns.hex.x + 1, topY + 6.8);
+    doc.text(
+      'Filament Usage',
+      columns.bitty.x + (columns.bitty.width + columns.biggy.width) / 2,
+      topY + 3.6,
+      { align: 'center' }
+    );
+    doc.text('Bitty', columns.bitty.x + columns.bitty.width / 2, topY + 8.8, { align: 'center' });
+    doc.text('Biggy', columns.biggy.x + columns.biggy.width / 2, topY + 8.8, { align: 'center' });
+
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'normal');
+    return topY + TABLE_HEADER_H;
+  };
+
+  const ensureRowSpace = neededHeight => {
+    if (yPos + neededHeight <= PAGE_H - 20) return;
+    doc.addPage();
+    yPos = drawTableHeader(MARGIN, true);
+  };
+
+  yPos = drawTableHeader(yPos);
+
   let rowIndex = 0;
   parts.forEach(part => {
-    // Handle 'window' part specially based on windowsMaterial
-    if (part.id === 'window') {
-      // Alternating row background
-      if (rowIndex % 2 === 0) {
-        doc.setFillColor(245, 245, 245);
-        doc.rect(MARGIN, yPos, CONTENT_W, ROW_H, 'F');
-      }
-      doc.setFontSize(8);
-      if (windowsMaterial === 'acrylic') {
-        // No color swatch; just show "Windows: Clear acrylic"
-        doc.text('Windows', COL_PART + 1, yPos + 5.5);
-        doc.text('Clear acrylic', COL_COLOR + 1, yPos + 5.5);
-      } else {
-        // 3D printed — show with chosen color
-        const colorId = selections[part.id] || part.defaultColorId;
-        const color   = colorMap[colorId];
-        if (color) {
-          const swatchSize = 5;
-          const swatchX    = COL_COLOR - 7;
-          const swatchY    = yPos + (ROW_H - swatchSize) / 2;
-          const rgb = _hexToRGB(color.hex);
-          doc.setFillColor(rgb.r, rgb.g, rgb.b);
-          doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'F');
-          doc.setDrawColor(180);
-          doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'S');
-          doc.setDrawColor(0);
-          doc.text('Windows (×2)', COL_PART + 1, yPos + 5.5);
-          doc.text(color.name,      COL_COLOR + 1, yPos + 5.5);
-          doc.text(color.hex,       COL_HEX   + 1, yPos + 5.5);
-          if (color.url) {
-            const urlText = color.url.replace(/^https?:\/\//, '').slice(0, 30);
-            doc.setTextColor(0, 80, 180);
-            doc.textWithLink(urlText, COL_URL + 1, yPos + 5.5, { url: color.url });
-            doc.setTextColor(0);
-          }
-        }
-      }
-      yPos += ROW_H;
-      rowIndex++;
-      if (yPos > 270) { doc.addPage(); yPos = MARGIN; }
-      return;
-    }
-
+    const isWindow = part.id === 'window';
     const colorId = selections[part.id] || part.defaultColorId;
-    const color   = colorMap[colorId];
-    if (!color) return;
+    const color = colorMap[colorId];
 
-    // Alternating row background
+    ensureRowSpace(TABLE_ROW_H);
+
     if (rowIndex % 2 === 0) {
       doc.setFillColor(245, 245, 245);
-      doc.rect(MARGIN, yPos, CONTENT_W, ROW_H, 'F');
+      doc.rect(MARGIN, yPos, CONTENT_W, TABLE_ROW_H, 'F');
     }
 
-    // Color swatch
-    const swatchSize = 5;
-    const swatchX    = COL_COLOR - 7;
-    const swatchY    = yPos + (ROW_H - swatchSize) / 2;
-    const rgb = _hexToRGB(color.hex);
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'F');
-    doc.setDrawColor(180);
-    doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'S');
-    doc.setDrawColor(0);
+    doc.setDrawColor(215);
+    doc.rect(MARGIN, yPos, CONTENT_W, TABLE_ROW_H, 'S');
+    [
+      columns.part.x,
+      columns.color.x,
+      columns.hex.x,
+      columns.bitty.x,
+      columns.biggy.x,
+      MARGIN + CONTENT_W,
+    ].forEach(x => doc.line(x, yPos, x, yPos + TABLE_ROW_H));
 
     doc.setFontSize(8);
-    const partLabel = part.qty && part.qty > 1 ? `${part.label} (×${part.qty})` : part.label;
-    doc.text(partLabel,  COL_PART  + 1, yPos + 5.5);
-    doc.text(color.name,  COL_COLOR + 1, yPos + 5.5);
-    doc.text(color.hex,   COL_HEX   + 1, yPos + 5.5);
 
-    // URL (truncated to fit)
-    if (color.url) {
-      const urlText = color.url.replace(/^https?:\/\//, '').slice(0, 30);
-      doc.setTextColor(0, 80, 180);
-      doc.textWithLink(urlText, COL_URL + 1, yPos + 5.5, { url: color.url });
-      doc.setTextColor(0);
+    if (isWindow) {
+      if (windowsMaterial === 'acrylic') {
+        doc.text('Windows', columns.part.x + 1, yPos + 5.5);
+        doc.text('Clear acrylic', columns.color.x + 1, yPos + 5.5);
+      } else if (color) {
+        _drawSwatch(doc, color.hex, columns.color.x - 7, yPos + 1.5);
+        doc.text('Windows (×2)', columns.part.x + 1, yPos + 5.5);
+        doc.text(color.name, columns.color.x + 1, yPos + 5.5);
+        doc.text(color.hex, columns.hex.x + 1, yPos + 5.5);
+      }
+    } else if (color) {
+      const partLabel = part.qty && part.qty > 1 ? `${part.label} (×${part.qty})` : part.label;
+      _drawSwatch(doc, color.hex, columns.color.x - 7, yPos + 1.5);
+      doc.text(partLabel, columns.part.x + 1, yPos + 5.5);
+      doc.text(color.name, columns.color.x + 1, yPos + 5.5);
+      doc.text(color.hex, columns.hex.x + 1, yPos + 5.5);
     }
 
-    yPos += ROW_H;
-    rowIndex++;
-
-    // Add new page if needed
-    if (yPos > 270) {
-      doc.addPage();
-      yPos = MARGIN;
-    }
+    yPos += TABLE_ROW_H;
+    rowIndex += 1;
   });
 
-  // ── Footer ───────────────────────────────────────────────────────────────
   const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
+  for (let pageIndex = 1; pageIndex <= pageCount; pageIndex += 1) {
+    doc.setPage(pageIndex);
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(
-      'Lightning Bug Club — lightningbugclub.com',
-      MARGIN,
-      290
-    );
-    doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, 290, { align: 'right' });
+    doc.text('Lightning Bug Club — lightningbugclub.com', MARGIN, 290);
+    doc.text(`Page ${pageIndex} of ${pageCount}`, PAGE_W - MARGIN, 290, { align: 'right' });
   }
 
   doc.save('gatagata-build-blueprint.pdf');
 }
 
-/** Convert a #RRGGBB hex string to { r, g, b } (0–255). */
+async function _drawPreviewRow(doc, slots, { pageWidth, margin, contentWidth, yPos }) {
+  const gap = slots.length === 1 ? 0 : 6;
+  const slotWidth = slots.length === 1
+    ? Math.min(108, contentWidth)
+    : (contentWidth - gap * (slots.length - 1)) / slots.length;
+  const frameHeight = slots.length === 1 ? 68 : 42;
+  const captionOffset = 4.5;
+  const startX = margin + (contentWidth - (slotWidth * slots.length + gap * (slots.length - 1))) / 2;
+
+  for (let index = 0; index < slots.length; index += 1) {
+    const slot = slots[index];
+    const slotX = startX + index * (slotWidth + gap);
+
+    doc.setDrawColor(205);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(slotX, yPos, slotWidth, frameHeight, 1.5, 1.5, 'FD');
+
+    if (slot.dataURL) {
+      try {
+        const size = await _getImageDimensions(slot.dataURL);
+        const maxWidth = slotWidth - 4;
+        const maxHeight = frameHeight - 4;
+        const scale = Math.min(maxWidth / size.width, maxHeight / size.height);
+        const drawWidth = size.width * scale;
+        const drawHeight = size.height * scale;
+        const drawX = slotX + (slotWidth - drawWidth) / 2;
+        const drawY = yPos + (frameHeight - drawHeight) / 2;
+        doc.addImage(slot.dataURL, 'PNG', drawX, drawY, drawWidth, drawHeight);
+      } catch (_) {
+        // Leave the frame empty if a single image cannot be decoded.
+      }
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(80);
+    doc.text(slot.label, slotX + slotWidth / 2, yPos + frameHeight + captionOffset, { align: 'center' });
+    doc.setTextColor(0);
+  }
+
+  return yPos + frameHeight + captionOffset + 5;
+}
+
+function _normalizePreviewSlots(previewDataURLs, previewDataURL) {
+  if (previewDataURLs && !Array.isArray(previewDataURLs) && typeof previewDataURLs === 'object') {
+    return [
+      { label: 'Front', dataURL: previewDataURLs.front || null },
+      { label: 'Side', dataURL: previewDataURLs.side || null },
+      { label: 'Back', dataURL: previewDataURLs.back || null },
+    ];
+  }
+
+  if (Array.isArray(previewDataURLs) && previewDataURLs.length) {
+    return previewDataURLs.map((dataURL, index) => ({
+      label: ['Front', 'Side', 'Back'][index] || `View ${index + 1}`,
+      dataURL: dataURL || null,
+    }));
+  }
+
+  if (previewDataURL) {
+    return [{ label: 'Preview', dataURL: previewDataURL }];
+  }
+
+  return [];
+}
+
+function _drawSwatch(doc, hex, x, y) {
+  const rgb = _hexToRGB(hex);
+  doc.setFillColor(rgb.r, rgb.g, rgb.b);
+  doc.rect(x, y, 5, 5, 'F');
+  doc.setDrawColor(180);
+  doc.rect(x, y, 5, 5, 'S');
+  doc.setDrawColor(215);
+}
+
+function _getImageDimensions(dataURL) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    img.onerror = () => reject(new Error('Could not decode preview image.'));
+    img.src = dataURL;
+  });
+}
+
 function _hexToRGB(hex) {
   const clean = hex.replace('#', '');
   return {
