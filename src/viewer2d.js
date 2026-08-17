@@ -117,6 +117,11 @@ export async function setCurrentView(viewName) {
     });
   });
 
+  // Auto-fit window overlay to covered parts (side view only, requires DOM layout)
+  if (nextView === 'side') {
+    _fitWindowOverlay(svgEl);
+  }
+
   _applyState(getState());
   return svgEl;
 }
@@ -127,17 +132,75 @@ export async function setCurrentView(viewName) {
  * Also tags fixed/follower layers for special treatment in _applyState.
  */
 function _normalizeLayers(svgEl) {
+  let windowOverlayEl = null;
+
   // Iterate top-level <g> elements (the Illustrator layers)
   svgEl.querySelectorAll(':scope > g[id]').forEach(g => {
     const rawId = g.getAttribute('id');
 
     if (LAYER_ID_MAP[rawId]) {
       g.setAttribute('data-part', LAYER_ID_MAP[rawId]);
+      if (rawId === 'Window_Overlay') windowOverlayEl = g;
     } else if (FIXED_LAYERS.hasOwnProperty(rawId)) {
       // Mark these so _applyState can find them
       g.setAttribute('data-fixed-layer', rawId);
     }
   });
+
+  // Guarantee window overlay is drawn on top (last child = highest z-order)
+  if (windowOverlayEl && svgEl.lastElementChild !== windowOverlayEl) {
+    svgEl.appendChild(windowOverlayEl);
+  }
+}
+
+/**
+ * Compute the union bounding box of hole-blocker, main-gear, and mid-plate in the
+ * side view, then resize the Window_Overlay rect to cover that area (plus padding).
+ * Must be called after the SVG is appended to the live DOM so getBBox() works.
+ */
+function _fitWindowOverlay(svgEl) {
+  const PADDING = 6; // user units of extra coverage on each side
+  const CORNER_RADIUS = 8;
+  const FALLBACK = { x: 476, y: 155, width: 230, height: 240 }; // original hardcoded values
+
+  const overlayGroup = svgEl.querySelector('[data-part="window"]');
+  if (!overlayGroup) return;
+
+  const overlayRect = overlayGroup.querySelector('rect');
+  if (!overlayRect) return;
+
+  // Collect bboxes from target parts; guard against missing elements or getBBox errors
+  const targetParts = ['hole-blocker', 'main-gear', 'mid-plate'];
+  let union = null;
+  targetParts.forEach(partId => {
+    const el = svgEl.querySelector(`[data-part="${partId}"]`);
+    if (!el) return;
+    try {
+      const bb = el.getBBox();
+      if (bb.width === 0 && bb.height === 0) return;
+      if (!union) {
+        union = { x: bb.x, y: bb.y, x2: bb.x + bb.width, y2: bb.y + bb.height };
+      } else {
+        union.x  = Math.min(union.x,  bb.x);
+        union.y  = Math.min(union.y,  bb.y);
+        union.x2 = Math.max(union.x2, bb.x + bb.width);
+        union.y2 = Math.max(union.y2, bb.y + bb.height);
+      }
+    } catch (_) { /* element not rendered yet — skip */ }
+  });
+
+  const box = union
+    ? { x: union.x - PADDING, y: union.y - PADDING,
+        width: union.x2 - union.x + PADDING * 2,
+        height: union.y2 - union.y + PADDING * 2 }
+    : FALLBACK;
+
+  overlayRect.setAttribute('x',      box.x);
+  overlayRect.setAttribute('y',      box.y);
+  overlayRect.setAttribute('width',  box.width);
+  overlayRect.setAttribute('height', box.height);
+  overlayRect.setAttribute('rx',     CORNER_RADIUS);
+  overlayRect.setAttribute('ry',     CORNER_RADIUS);
 }
 
 /**
@@ -162,7 +225,9 @@ function _applyState(state) {
       if (show) {
         el.setAttribute('opacity', '0.8');
         const colorId = state.selections['window'];
-        if (colorId) _setFillRecursive(el, _resolveHex(colorId));
+        // Use selection color, or fall back to basic-pla-cyan default
+        const hex = colorId ? _resolveHex(colorId) : _resolveHex('basic-pla-cyan');
+        _setFillRecursive(el, hex);
       }
       // Don't fall through to selection highlight for windows
       return;
