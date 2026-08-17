@@ -30,6 +30,19 @@
     <aside id="sidebar">
       <h2>Parts</h2>
       <ul id="parts-list"></ul>
+
+      <!-- Windows material selector -->
+      <div id="windows-material-selector">
+        <h3>Windows</h3>
+        <label class="windows-option">
+          <input type="radio" name="windows-material" value="printed" id="windows-printed" checked />
+          3D printed windows
+        </label>
+        <label class="windows-option">
+          <input type="radio" name="windows-material" value="acrylic" id="windows-acrylic" />
+          Clear acrylic windows
+        </label>
+      </div>
     </aside>
 
     <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
@@ -43,9 +56,6 @@
         </button>
         <button class="view-tab" type="button" data-view="back" role="tab" aria-selected="false">
           Back
-        </button>
-        <button class="view-tab" type="button" data-view="iso" role="tab" aria-selected="false">
-          Isometric
         </button>
       </div>
       <div id="viewer-stage">

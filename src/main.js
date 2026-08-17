@@ -1,8 +1,7 @@
 /**
  * main.js — wires together palette, parts, state, viewer2d, and UI.
  *
- * This is the Phase 1 entry point. In Phase 2 (Three.js), only the viewer
- * import changes; palette, parts, state, and pdf modules remain the same.
+ * Phase 1 entry point. In Phase 2 (Three.js), only the viewer import changes.
  */
 
 import { loadPalette, getColors, getColorById } from './palette.js';
@@ -11,6 +10,7 @@ import {
   getState,
   setPartColor,
   setSelectedPart,
+  setWindowsMaterial,
   subscribe,
   decodeStateFromURL,
   pushStateToURL,
@@ -59,7 +59,9 @@ async function init() {
 
   // ── Build parts list sidebar ──────────────────────────────────────────────
   const partsList = document.getElementById('parts-list');
-  parts.forEach(part => {
+  // Exclude 'window' from the main parts list (it's controlled via the windows selector)
+  const displayParts = parts.filter(p => p.id !== 'window');
+  displayParts.forEach(part => {
     const li = document.createElement('li');
     li.className = 'part-item';
     li.dataset.partId = part.id;
@@ -67,6 +69,9 @@ async function init() {
     li.addEventListener('click', () => setSelectedPart(part.id));
     partsList.appendChild(li);
   });
+
+  // ── Windows material selector ─────────────────────────────────────────────
+  _wireWindowsSelector();
 
   // ── Build color palette grid ──────────────────────────────────────────────
   const paletteGrid = document.getElementById('palette-grid');
@@ -110,6 +115,20 @@ async function init() {
       btn.classList.toggle('active', btn.dataset.colorId === activeColorId);
     });
 
+    // Disable window color picking when "Clear acrylic" is selected
+    const windowsPrinted = snap.windowsMaterial === 'printed';
+    paletteGrid.querySelectorAll('.color-swatch').forEach(btn => {
+      if (snap.selectedPartId === 'window' && !windowsPrinted) {
+        btn.disabled = true;
+        btn.style.opacity = '0.35';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+      }
+    });
+
     // Push state to URL for shareability
     pushStateToURL();
   });
@@ -118,12 +137,8 @@ async function init() {
   document.getElementById('btn-export-pdf').addEventListener('click', async () => {
     try {
       const svgEl = getSVGElement();
-      if (!svgEl) {
-        throw new Error('Viewer not ready yet.');
-      }
+      if (!svgEl) throw new Error('Viewer not ready yet.');
 
-      // Clone the live inline SVG, force XML namespaces, then rasterize it
-      // through an <img> + <canvas> pipeline so the current visible view exports.
       let previewDataURL = null;
       try {
         previewDataURL = await _svgToDataURL(svgEl);
@@ -134,6 +149,7 @@ async function init() {
       await exportPDF({
         previewDataURL,
         selections: getState().selections,
+        windowsMaterial: getState().windowsMaterial,
         parts: getParts(),
         colors: getColors(),
       });
@@ -188,6 +204,32 @@ function _syncViewTabs() {
   });
 }
 
+function _wireWindowsSelector() {
+  const radios = document.querySelectorAll('input[name="windows-material"]');
+  if (!radios.length) return;
+
+  // Sync radio to current state
+  const currentMaterial = getState().windowsMaterial;
+  radios.forEach(r => { r.checked = r.value === currentMaterial; });
+
+  radios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        setWindowsMaterial(radio.value);
+        // If switching to acrylic, deselect window part so palette isn't confusing
+        if (radio.value === 'acrylic' && getState().selectedPartId === 'window') {
+          setSelectedPart(null);
+        }
+      }
+    });
+  });
+
+  // Keep radios in sync with state (e.g. URL restore)
+  subscribe(snap => {
+    radios.forEach(r => { r.checked = r.value === snap.windowsMaterial; });
+  });
+}
+
 function _renderPaletteGroups(containerEl, colors) {
   const grouped = colors.reduce((map, color) => {
     const key = color.series || 'Other';
@@ -231,9 +273,14 @@ function _renderPaletteGroups(containerEl, colors) {
       }
 
       btn.addEventListener('click', () => {
-        const { selectedPartId } = getState();
+        const { selectedPartId, windowsMaterial } = getState();
         if (!selectedPartId) {
           _showToast('Select a part first, then choose a color.');
+          return;
+        }
+        // Block window color selection when acrylic is chosen
+        if (selectedPartId === 'window' && windowsMaterial === 'acrylic') {
+          _showToast('Switch to "3D printed windows" to choose a window color.');
           return;
         }
         setPartColor(selectedPartId, color.id);
@@ -286,12 +333,7 @@ async function _svgToDataURL(svgEl) {
 }
 
 function _viewLabel(viewName) {
-  return ({
-    front: 'Front',
-    side: 'Side',
-    back: 'Back',
-    iso: 'Isometric',
-  })[viewName] || 'Front';
+  return ({ front: 'Front', side: 'Side', back: 'Back' })[viewName] || 'Front';
 }
 
 /** Show a brief toast notification. */

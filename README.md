@@ -1,199 +1,134 @@
 # Gata-Gata Gacha Machine — Color Customizer
 
-A car-configurator-style **2D SVG color customizer** for the [Gata-Gata gachapon vending machine](https://www.lightningbugclub.com/product/gatagata-gacha-machine-100-3d-printable/W4J4ZBI4S6XYEYQWZHEMS6OJ) by Lightning Bug Club.
+A Phase 1 2D orthographic color-customizer web app for the Lightning Bug Club Gata-Gata Gacha Machine.  
+Built with vanilla JS / HTML / CSS. No build step — served directly via `python -m http.server`.
 
-Select one of the 16 colorable parts, choose a Bambu Lab PLA filament color from the comprehensive palette, see the SVG recolor live across four placeholder views, and export a build-blueprint PDF listing every part with its chosen filament color and product URL.
-
----
-
-## Quick Start
-
-No build step required. Serve with any static file server (ES modules require a server — `file://` will not work):
+## Running the app
 
 ```bash
-# Python
 python -m http.server 8080
-
-# Python 3
-python3 -m http.server 8080
-
-# Node
-npx serve .
+# Open http://localhost:8080
 ```
-
-Then open `http://localhost:8080` in your browser.
 
 ---
 
-## How It Works
+## Features
 
-1. **Select a part** from the sidebar (or click directly on the SVG).
-2. **Switch views** with the Front / Side / Back / Isometric selector to compare angles.
-3. **Choose a color** from the grouped PLA palette — the active SVG recolors live.
-4. **Export PDF** to download a build blueprint with a color legend. The PDF uses the currently visible view when preview rasterization succeeds, and still exports the legend if the preview image cannot be rendered.
+### Views: Front / Side / Back
 
-The current URL is updated with a `?c=` parameter encoding all selections so builds can be bookmarked and shared.
+The view selector offers three orthographic views of the machine.  
+Switching views re-applies all current color selections immediately — all three views share the same logical color state keyed by part id.
+
+> **Isometric view has been removed.** Only Front, Side, and Back are available.
+
+### Parts list & color palette
+
+Click a part in the sidebar, then click a swatch in the color palette to recolor it.  
+The current color name and hex code are shown in the palette panel header.  
+Colors are grouped by Bambu PLA series (Basic, Matte, Silk, Gradient, CF, Sparkle, Wood, Translucent, Glow, Metal, Galaxy, Marble).
+
+### Top Chamber — multi-layer follower
+
+The sidebar shows a single **Top Chamber** part.  
+Behind the scenes it governs three SVG layers:
+
+| Layer | Behavior |
+|-------|----------|
+| `Top Chamber_Outside` | User's chosen color |
+| `Top Chamber_Inside_Back` | Always mirrors the user's chosen color |
+| `Top Chamber_Inside` | Always white (`#FFFFFF`) — fixed, never editable |
+
+### Black layer — always fixed gray
+
+The `Black` layer is always rendered as `#565656` regardless of any user action.  
+It is not selectable and does not appear in the parts list.
+
+### Windows material selector
+
+Below the parts list is a **Windows** section with two options:
+
+| Option | Behavior |
+|--------|----------|
+| **3D printed windows** (default) | The user can pick a PLA color for the windows. Windows appear at **80% opacity** in the **Side view only**, visually covering the hole-blocker, main-gear, and mid-plate regions. Windows are never shown in Front or Back views. |
+| **Clear acrylic windows** | Windows are fully transparent — no overlay is shown. The window color picker is disabled. |
+
+> **Note:** The finalized SVGs currently contain no window geometry. Windows are **simulated** as a rounded-rectangle overlay in the side view, marked with an HTML comment for future replacement with real artwork.
+
+### Shareable URL
+
+The **Share** button copies a URL that encodes all current color selections **and** the windows material choice (`?c=...&w=printed|acrylic`). Pasting this URL restores the exact configuration.
+
+### Export PDF
+
+The **Export PDF** button generates a build blueprint PDF containing:
+- A rasterized preview of the currently visible view
+- A legend table with part names, color swatches, hex codes, and Bambu PLA product URLs
+- For windows: `Windows: Clear acrylic` (no color) or `Windows (×2)` with the chosen color
 
 ---
 
-## Module Map
+## File layout
 
 ```
-├── index.html                  # App shell — loads src/main.js as an ES module
+/
+├── index.html               # App shell
 ├── src/
-│   ├── main.js                 # Entry point — wires palette, parts, state, viewer, UI
-│   ├── viewer2d.js             # 2D SVG viewer — swaps Front/Side/Back/Iso SVGs,
-│   │                           #   wires click + live recoloring
-│   │                           #   Supports linked parts: multiple SVG elements can share
-│   │                           #   the same data-part value to recolor as one logical unit
-│   ├── state.js                # Config state + URL encode/decode (shared across phases)
-│   ├── parts.js                # Loads data/parts.json
-│   ├── palette.js              # Loads data/bambu-pla-colors.json
-│   ├── pdf.js                  # PDF blueprint export via jsPDF (decoupled from viewer)
-│   └── styles.css              # App styles
-├── data/
-│   ├── parts.json              # 16 colorable parts (see schema below)
-│   └── bambu-pla-colors.json  # ~126 Bambu Lab PLA colors (see below)
+│   ├── main.js              # UI wiring, view selector, palette, windows selector
+│   ├── viewer2d.js          # SVG loader, layer normalizer, recolor engine
+│   ├── state.js             # Shared state (selections, selectedPartId, windowsMaterial)
+│   ├── palette.js           # Palette loader
+│   ├── parts.js             # Parts loader
+│   ├── pdf.js               # PDF export
+│   └── styles.css           # App styles
 ├── assets/
-│   ├── machine-front.svg       # Layered front SVG placeholder
-│   ├── machine-side.svg        # Layered right-side SVG placeholder
-│   ├── machine-back.svg        # Layered back SVG placeholder
-│   └── machine-iso.svg         # Layered isometric SVG placeholder
+│   ├── machine-front.svg    # Finalized front-view artwork
+│   ├── machine-side.svg     # Finalized side-view artwork (with simulated window overlay)
+│   └── machine-back.svg     # Finalized back-view artwork
+├── data/
+│   ├── parts.json           # Part definitions with logical ids, labels, qty, defaultColorId
+│   └── bambu-pla-colors.json # Bambu PLA color catalog
 └── scripts/
-    └── fetch_bambu_pla.py      # Optional color dataset updater (see below)
+    └── fetch_bambu_pla.py   # Scraper for updating the color catalog
 ```
 
 ---
 
-## Data Files
+## SVG layer normalization
 
-### `data/parts.json`
+The finalized SVGs use Adobe Illustrator layer naming conventions.  
+On load, `viewer2d.js` walks each SVG and maps recognized layer `id` attributes to `data-part` logical part ids:
 
-Array of 16 part objects:
-
-```json
-{
-  "id": "window",
-  "label": "Window",
-  "qty": 2,
-  "defaultColorId": "basic-pla-cyan",
-  "svgIds": ["part-window"]
-}
-```
-
-| Field | Description |
+| SVG layer id | Logical part id |
 |---|---|
-| `id` | Logical part identifier (used as the state key) |
-| `label` | Human-readable name shown in the sidebar and PDF legend |
-| `qty` | Print quantity — `Window` is 2; all other parts are 1 |
-| `defaultColorId` | Starting color — **must** be a valid `id` from `bambu-pla-colors.json` |
-| `svgIds` | Array of SVG element ids (`id="part-<x>"`) driven by this part |
+| `Bottom_Chamber` | `bottom-chamber` |
+| `Bottom_Plate__x26__Mouth` | `bottom-plate-mouth` |
+| `Coin_Mech._Back_Plate` | `coin-mech-back-plate` |
+| `Coin_Mech._Gear` | `coin-mech-gear` |
+| `Coin` | `coin` |
+| `Coin_Mech._Front_Plate` | `coin-mech-front-plate` |
+| `Knob` | `knob` |
+| `Top_Chamber_x5F_Outside` | `top-chamber` |
+| `Main_Gear` | `main-gear` |
+| `Hole_Blocker` | `hole-blocker` |
+| `Mid-Plate` | `mid-plate` |
+| `Lid_Lock` | `lid-lock` |
+| `Back_Cover` | `back-cover` |
+| `Rear_Lock_Knob` | `rear-lock-knob` |
+| `Lid` | `lid` |
+| `Window_Overlay` | `window` |
 
-**Linked parts — Bottom Plate / Mouth:**  
-`bottom-plate-mouth` is a single logical part whose `svgIds` contains two elements — `part-bottom-plate` and `part-mouth`. Both SVG elements carry `data-part="bottom-plate-mouth"`, so selecting this part and choosing a color recolors *both* regions together in one action.
+Fixed/follower layers are tagged with `data-fixed-layer` and handled separately (not user-selectable):
 
-**Separate part — Bottom Chamber:**  
-`bottom-chamber` is its own independent part (`data-part="bottom-chamber"`). It is **not** linked to Bottom Plate / Mouth and recolors independently.
-
-**Window qty 2:**  
-Window has `qty: 2` because two identical pieces are printed. The PDF legend renders it as `Window (×2)`.
-
-### `data/bambu-pla-colors.json`
-
-Source: <https://3dfilamentprofiles.com/filaments/bambu-lab/pla>
-
-~126 Bambu Lab PLA colors across 12 series. The UI groups swatches dynamically by each entry's `series` value so new series appear automatically:
-
-| Series | Examples |
+| SVG layer id | Fixed behavior |
 |---|---|
-| Basic PLA | Jade White, Black, Cyan, Cobalt Blue, Bambu Green, Gold, Red … |
-| PLA Matte | Ivory White, Marine Blue, Grass Green … |
-| PLA Silk | White, Gold, Rose Gold, Baby Blue … |
-| PLA Basic Gradient | Blueberry Bubblegum, Sakura … |
-| PLA CF | Matcha Green, Jeans Blue, Royal Blue … |
-| PLA Sparkle | Classic Gold, Alpine Green … |
-| PLA Wood | White Oak … |
-| PLA Translucent | Ice Blue, Blue, Light Jade … |
-| PLA Glow | Glow Green, Glow Blue … |
-| PLA Metal | Cobalt Blue Metallic, Oxide Green Metallic, Iridium Gold Metallic … |
-| PLA Galaxy | Green … |
-| PLA Marble | White Marble … |
-
-JSON schema per entry:
-
-```json
-{
-  "id": "basic-pla-cyan",
-  "name": "Cyan",
-  "hex": "#0086D6",
-  "series": "Basic PLA",
-  "finish": "basic",
-  "url": "https://store.bambulab.com/products/pla-basic-filament"
-}
-```
-
-Multi-color filaments (gradients, dual-silk) may include optional fields:
-- `hexes`: array of hex strings for the component colors
-- `notes`: human-readable description
-
----
-
-## SVG Replacement Convention
-
-To swap in the real layered SVG artwork, give every colorable region in each view:
-
-```svg
-<path id="part-<id>" data-part="<partId>" fill="<defaultFill>" … />
-```
-
-- `id` must be unique in the document (e.g. `part-lid`, `part-window`).
-- `data-part` must match the logical `id` in `parts.json`.
-- For linked parts, both elements share the same `data-part` value:
-  ```svg
-  <rect id="part-bottom-plate" data-part="bottom-plate-mouth" … />
-  <rect id="part-mouth"        data-part="bottom-plate-mouth" … />
-  ```
-- No code changes needed — `viewer2d.js` detects all recolorable elements via `[data-part]`.
-- The current repo ships with **placeholder** front / side / back / isometric art; production illustrations only need to preserve the same `id` / `data-part` mapping.
-
----
-
-## Scraper — Updating the Color Dataset
-
-`scripts/fetch_bambu_pla.py` scrapes `3dfilamentprofiles.com` and rewrites `data/bambu-pla-colors.json`. It is **not** required for the frontend — the JSON is checked in.
-
-```bash
-pip install requests beautifulsoup4
-python scripts/fetch_bambu_pla.py              # overwrites data/bambu-pla-colors.json
-python scripts/fetch_bambu_pla.py --dry-run    # print JSON to stdout only
-python scripts/fetch_bambu_pla.py --out path/to/output.json
-```
+| `Top_Chamber_x5F_Inside` | Always `#FFFFFF` |
+| `Top_Chamber_x5F_Inside_x5F_Back` | Always mirrors `top-chamber` user color |
+| `Black` | Always `#565656` |
 
 ---
 
 ## Roadmap
 
-| Phase | Description | Status |
-|---|---|---|
-| **1 — 2D (current)** | 2D SVG customizer, Bambu PLA palette, PDF export | ✅ In progress |
-| **2 — 3D** | Three.js viewer reusing `state.js` / `palette.js` / `pdf.js`; replace `viewer2d.js` with `viewer3d.js` | Planned |
-| **3 — Order integration** | Submit build configuration to lightningbugclub.com | Planned |
-
----
-
-## Removed Legacy 3D Files
-
-The abandoned Three.js prototype files have been removed from the root app layout so the repo reflects the current Phase 1 2D app:
-
-- `viewer.js`
-- `style.css`
-- `convert.py`
-- empty `models/` and `hdri/` directories
-
-The scraper, checked-in JSON data, reference documents, and SVG assets remain part of the supported workflow.
-
----
-
-## License
-
-© Lightning Bug Club. All rights reserved.
+- **Phase 2:** Replace `viewer2d.js` with a Three.js 3D viewer (`viewer3d.js`).  
+  All other modules (state, palette, parts, pdf) remain unchanged.
+- **Phase 3:** Order submission integration.
