@@ -375,3 +375,40 @@ footer a { color: var(--text-muted); }
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 999px; }
+
+/* ── Windows material selector ─────────────────────────────────────── */
+#windows-material-selector {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #2e3a4e;
+}
+
+#windows-material-selector h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8892a4;
+  margin-bottom: 0.5rem;
+}
+
+.windows-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #c9d1d9;
+  transition: background 0.15s;
+}
+
+.windows-option:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.windows-option input[type="radio"] {
+  accent-color: #58a6ff;
+  cursor: pointer;
+}

@@ -19,12 +19,13 @@
 /**
  * Export a PDF blueprint.
  * @param {Object} opts
- * @param {string}   opts.previewDataURL  - Data URL of the recolored preview image
- * @param {Object}   opts.selections      - { partId: colorId }
- * @param {Array}    opts.parts           - Parts array [{ id, label, defaultColorId }]
- * @param {Array}    opts.colors          - Colors array [{ id, name, hex, series, url }]
+ * @param {string}   opts.previewDataURL   - Data URL of the recolored preview image
+ * @param {Object}   opts.selections       - { partId: colorId }
+ * @param {string}   opts.windowsMaterial  - 'printed' | 'acrylic'
+ * @param {Array}    opts.parts            - Parts array [{ id, label, defaultColorId }]
+ * @param {Array}    opts.colors           - Colors array [{ id, name, hex, series, url }]
  */
-export async function exportPDF({ previewDataURL, selections, parts, colors }) {
+export async function exportPDF({ previewDataURL, selections, windowsMaterial = 'printed', parts, colors }) {
   // jsPDF is loaded globally via CDN; if it is missing, fail loudly so main.js
   // can show a user-visible message instead of the export button failing silently.
   const jsPDF = window.jspdf?.jsPDF;
@@ -91,6 +92,49 @@ export async function exportPDF({ previewDataURL, selections, parts, colors }) {
   // Table rows
   let rowIndex = 0;
   parts.forEach(part => {
+    // Handle 'window' part specially based on windowsMaterial
+    if (part.id === 'window') {
+      // Alternating row background
+      if (rowIndex % 2 === 0) {
+        doc.setFillColor(245, 245, 245);
+        doc.rect(MARGIN, yPos, CONTENT_W, ROW_H, 'F');
+      }
+      doc.setFontSize(8);
+      if (windowsMaterial === 'acrylic') {
+        // No color swatch; just show "Windows: Clear acrylic"
+        doc.text('Windows', COL_PART + 1, yPos + 5.5);
+        doc.text('Clear acrylic', COL_COLOR + 1, yPos + 5.5);
+      } else {
+        // 3D printed — show with chosen color
+        const colorId = selections[part.id] || part.defaultColorId;
+        const color   = colorMap[colorId];
+        if (color) {
+          const swatchSize = 5;
+          const swatchX    = COL_COLOR - 7;
+          const swatchY    = yPos + (ROW_H - swatchSize) / 2;
+          const rgb = _hexToRGB(color.hex);
+          doc.setFillColor(rgb.r, rgb.g, rgb.b);
+          doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'F');
+          doc.setDrawColor(180);
+          doc.rect(swatchX, swatchY, swatchSize, swatchSize, 'S');
+          doc.setDrawColor(0);
+          doc.text('Windows (×2)', COL_PART + 1, yPos + 5.5);
+          doc.text(color.name,      COL_COLOR + 1, yPos + 5.5);
+          doc.text(color.hex,       COL_HEX   + 1, yPos + 5.5);
+          if (color.url) {
+            const urlText = color.url.replace(/^https?:\/\//, '').slice(0, 30);
+            doc.setTextColor(0, 80, 180);
+            doc.textWithLink(urlText, COL_URL + 1, yPos + 5.5, { url: color.url });
+            doc.setTextColor(0);
+          }
+        }
+      }
+      yPos += ROW_H;
+      rowIndex++;
+      if (yPos > 270) { doc.addPage(); yPos = MARGIN; }
+      return;
+    }
+
     const colorId = selections[part.id] || part.defaultColorId;
     const color   = colorMap[colorId];
     if (!color) return;

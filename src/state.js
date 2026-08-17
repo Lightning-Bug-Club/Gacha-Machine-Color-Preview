@@ -1,15 +1,11 @@
 /**
  * state.js — configuration state management and URL serialization.
  *
- * Shared module: designed to be reused by:
- *   Phase 1 — 2D viewer (viewer2d.js)
- *   Phase 2 — Three.js 3D viewer (future viewer3d.js)
- *   Phase 3 — order submission
- *
  * State shape:
  *   {
- *     selections: { [partId]: colorId },   // user's part→color assignments
- *     selectedPartId: string | null        // currently highlighted part
+ *     selections:      { [partId]: colorId },  // part→color assignments
+ *     selectedPartId:  string | null,           // currently highlighted part
+ *     windowsMaterial: 'printed' | 'acrylic',   // windows material choice
  *   }
  */
 
@@ -18,6 +14,7 @@ const _listeners = [];
 let _state = {
   selections: {},
   selectedPartId: null,
+  windowsMaterial: 'printed', // default: 3D printed windows
 };
 
 /** Return a shallow copy of the current state. */
@@ -54,6 +51,13 @@ export function loadSelections(selections) {
   _notify();
 }
 
+/** Set the windows material choice and notify listeners. */
+export function setWindowsMaterial(material) {
+  if (material !== 'printed' && material !== 'acrylic') return;
+  _state = { ..._state, windowsMaterial: material };
+  _notify();
+}
+
 /** Register a callback to be called whenever state changes. */
 export function subscribe(fn) {
   _listeners.push(fn);
@@ -71,15 +75,21 @@ function _notify() {
 // ─── URL encode / decode ────────────────────────────────────────────────────
 
 /**
- * Encode the current selections into a URL query string parameter `c`.
- * Format: c=partId:colorId,partId:colorId,...
+ * Encode the current selections + windowsMaterial into a URL query string.
+ * Format: c=partId:colorId,...  &w=printed|acrylic
  */
 export function encodeStateToURL() {
-  const entries = Object.entries(_state.selections);
-  if (entries.length === 0) return '';
-  const encoded = entries.map(([p, c]) => `${encodeURIComponent(p)}:${encodeURIComponent(c)}`).join(',');
   const url = new URL(window.location.href);
-  url.searchParams.set('c', encoded);
+
+  const entries = Object.entries(_state.selections);
+  if (entries.length > 0) {
+    const encoded = entries.map(([p, c]) => `${encodeURIComponent(p)}:${encodeURIComponent(c)}`).join(',');
+    url.searchParams.set('c', encoded);
+  } else {
+    url.searchParams.delete('c');
+  }
+
+  url.searchParams.set('w', _state.windowsMaterial);
   return url.toString();
 }
 
@@ -92,21 +102,31 @@ export function pushStateToURL() {
 }
 
 /**
- * Read selections from the current URL query string and load them into state.
+ * Read selections + windowsMaterial from the current URL and load them.
  * Returns the loaded selections object (may be empty).
  */
 export function decodeStateFromURL() {
   const params = new URLSearchParams(window.location.search);
+
+  // Restore color selections
   const c = params.get('c');
-  if (!c) return {};
   const selections = {};
-  c.split(',').forEach(pair => {
-    const idx = pair.indexOf(':');
-    if (idx === -1) return;
-    const partId = decodeURIComponent(pair.slice(0, idx));
-    const colorId = decodeURIComponent(pair.slice(idx + 1));
-    if (partId && colorId) selections[partId] = colorId;
-  });
-  loadSelections(selections);
+  if (c) {
+    c.split(',').forEach(pair => {
+      const idx = pair.indexOf(':');
+      if (idx === -1) return;
+      const partId  = decodeURIComponent(pair.slice(0, idx));
+      const colorId = decodeURIComponent(pair.slice(idx + 1));
+      if (partId && colorId) selections[partId] = colorId;
+    });
+    loadSelections(selections);
+  }
+
+  // Restore windows material
+  const w = params.get('w');
+  if (w === 'acrylic' || w === 'printed') {
+    setWindowsMaterial(w);
+  }
+
   return selections;
 }
