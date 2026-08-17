@@ -15,22 +15,24 @@ import {
   decodeStateFromURL,
   pushStateToURL,
 } from './state.js';
-import { initViewer, getSVGElement, getCurrentView, setCurrentView } from './viewer2d.js';
+import {
+  initViewer,
+  getCurrentView,
+  setCurrentView,
+  createPreviewSVG,
+  zoomIn,
+  zoomOut,
+  resetViewTransform,
+} from './viewer2d.js';
 import { exportPDF } from './pdf.js';
 
 const SERIES_ORDER = [
   'Basic PLA',
   'PLA Matte',
   'PLA Silk',
-  'PLA Basic Gradient',
-  'PLA CF',
-  'PLA Sparkle',
   'PLA Wood',
   'PLA Translucent',
   'PLA Glow',
-  'PLA Metal',
-  'PLA Galaxy',
-  'PLA Marble',
 ];
 
 async function init() {
@@ -56,6 +58,7 @@ async function init() {
   const viewerEl = document.getElementById('viewer');
   await initViewer(viewerEl, 'front');
   _wireViewSelector();
+  _wireZoomControls();
 
   // ── Build parts list sidebar ──────────────────────────────────────────────
   const partsList = document.getElementById('parts-list');
@@ -136,24 +139,16 @@ async function init() {
   // ── Export PDF button ─────────────────────────────────────────────────────
   document.getElementById('btn-export-pdf').addEventListener('click', async () => {
     try {
-      const svgEl = getSVGElement();
-      if (!svgEl) throw new Error('Viewer not ready yet.');
-
-      let previewDataURL = null;
-      try {
-        previewDataURL = await _svgToDataURL(svgEl);
-      } catch (e) {
-        console.warn('SVG rasterization failed, exporting PDF legend without preview image:', e);
-      }
+      const previewDataURLs = await _renderPreviewSet();
 
       await exportPDF({
-        previewDataURL,
+        previewDataURLs,
         selections: getState().selections,
         windowsMaterial: getState().windowsMaterial,
         parts: getParts(),
         colors: getColors(),
       });
-      _showToast(`PDF exported from the ${_viewLabel(getCurrentView())} view.`);
+      _showToast('PDF exported with Front, Side, and Back previews.');
     } catch (err) {
       console.error('PDF export failed:', err);
       _showToast(err.message || 'PDF export failed. Please try again.');
@@ -194,6 +189,12 @@ function _wireViewSelector() {
   });
 
   _syncViewTabs();
+}
+
+function _wireZoomControls() {
+  document.getElementById('btn-zoom-in')?.addEventListener('click', () => zoomIn());
+  document.getElementById('btn-zoom-out')?.addEventListener('click', () => zoomOut());
+  document.getElementById('btn-zoom-reset')?.addEventListener('click', () => resetViewTransform());
 }
 
 function _syncViewTabs() {
@@ -330,6 +331,30 @@ async function _svgToDataURL(svgEl) {
     img.onerror = () => reject(new Error('Could not render the current SVG view for PDF export.'));
     img.src = url;
   });
+}
+
+async function _renderPreviewSet() {
+  const state = getState();
+  const labels = ['front', 'side', 'back'];
+  const previews = {};
+
+  const results = await Promise.allSettled(labels.map(async viewName => {
+    const previewSvg = await createPreviewSVG(viewName, state);
+    return { viewName, dataURL: await _svgToDataURL(previewSvg) };
+  }));
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      previews[result.value.viewName] = result.value.dataURL;
+      return;
+    }
+
+    const failedView = labels[index];
+    console.warn(`SVG rasterization failed for ${failedView} view, continuing PDF export:`, result.reason);
+    previews[failedView] = null;
+  });
+
+  return previews;
 }
 
 function _viewLabel(viewName) {

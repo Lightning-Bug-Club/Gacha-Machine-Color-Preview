@@ -7,6 +7,15 @@
 
 let _colors = null;
 
+export const EXCLUDED_SERIES = [
+  'PLA Basic Gradient',
+  'PLA CF',
+  'PLA Sparkle',
+  'PLA Metal',
+  'PLA Galaxy',
+  'PLA Marble',
+];
+
 /**
  * Load the Bambu PLA color data from the JSON file.
  * Returns a promise that resolves to an array of color objects:
@@ -16,7 +25,7 @@ export async function loadPalette() {
   if (_colors) return _colors;
   const res = await fetch('./data/bambu-pla-colors.json');
   if (!res.ok) throw new Error(`Failed to load palette: ${res.status}`);
-  _colors = await res.json();
+  _colors = (await res.json()).filter(color => !EXCLUDED_SERIES.includes(color.series));
   return _colors;
 }
 

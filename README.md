@@ -19,13 +19,27 @@ python -m http.server 8080
 The view selector offers three orthographic views of the machine.  
 Switching views re-applies all current color selections immediately — all three views share the same logical color state keyed by part id.
 
+The preview also supports **zooming and panning**:
+- Mouse-wheel zoom centered on the cursor
+- On-screen **+ / − / Reset** controls
+- Click-and-drag panning while zoomed in
+- Zoom/pan state stays active while switching between Front / Side / Back
+
 > **Isometric view has been removed.** Only Front, Side, and Back are available.
 
 ### Parts list & color palette
 
 Click a part in the sidebar, then click a swatch in the color palette to recolor it.  
 The current color name and hex code are shown in the palette panel header.  
-Colors are grouped by Bambu PLA series (Basic, Matte, Silk, Gradient, CF, Sparkle, Wood, Translucent, Glow, Metal, Galaxy, Marble).
+Colors are grouped by Bambu PLA series. The selectable palette intentionally excludes:
+- PLA Basic Gradient
+- PLA CF
+- PLA Sparkle
+- PLA Metal
+- PLA Galaxy
+- PLA Marble
+
+The remaining groups keep **Basic PLA** first, followed by **PLA Matte**, **PLA Silk**, **PLA Wood**, **PLA Translucent**, **PLA Glow**, and any other non-excluded series.
 
 ### Top Chamber — multi-layer follower
 
@@ -49,10 +63,15 @@ Below the parts list is a **Windows** section with two options:
 
 | Option | Behavior |
 |--------|----------|
-| **3D printed windows** (default) | The user can pick a PLA color for the windows. Windows appear at **80% opacity** in the **Side view only**, visually covering the hole-blocker, main-gear, and mid-plate regions. Windows are never shown in Front or Back views. |
+| **3D printed windows** (default) | The user can pick a PLA color for the windows. Windows appear at **80% opacity** in the **Side view only**, visually covering the top chamber inside opening. Windows are never shown in Front or Back views. |
 | **Clear acrylic windows** | Windows are fully transparent — no overlay is shown. The window color picker is disabled. |
 
-> **Note:** The finalized SVGs currently contain no window geometry. Windows are **simulated** as a rounded-rectangle overlay in the side view. On load, the overlay is **automatically sized** to the union bounding box of the hole-blocker, main-gear, and mid-plate regions (plus a small padding), so it precisely covers those parts regardless of SVG scaling. The default window color is **Basic PLA Cyan** (`basic-pla-cyan`), which is applied on first load even before the user selects a color.
+> **Note:** The finalized SVGs currently contain no separate window geometry. Windows are **simulated** as a rounded-rectangle overlay in the side view. After the SVG is mounted, the overlay is resized to the **`Top_Chamber_Inside`** layer's bounding box, with a graceful fallback to the older union-bbox sizing if that layer is unavailable.
+
+### Default white loadout + instruction banner
+
+All machine parts, including the printed windows, now default to **Basic PLA Jade White** (`basic-pla-jade-white`) on first load.  
+To keep white parts readable, the SVG viewer preserves visible outlines/strokes, and the page shows a top instruction banner telling the user to click a part first and then choose a color.
 
 ### Shareable URL
 
@@ -61,9 +80,19 @@ The **Share** button copies a URL that encodes all current color selections **an
 ### Export PDF
 
 The **Export PDF** button generates a build blueprint PDF containing:
-- A rasterized preview of the currently visible view
-- A legend table with part names, color swatches, hex codes, and Bambu PLA product URLs
+- Framed **Front / Side / Back** raster previews in a single row on page 1, each scaled proportionally to avoid distortion
+- A legend table with part names, color swatches, hex codes, and blank **Filament Usage** columns for **Bitty** and **Biggy**
 - For windows: `Windows: Clear acrylic` (no color) or `Windows (×2)` with the chosen color
+
+The previews remain resilient during export: if one view fails to rasterize, the PDF still downloads.
+
+### Visual style
+
+The app now uses a **Windows 95-inspired** interface:
+- system gray background
+- beveled raised/inset panels and buttons
+- classic blue title bars
+- retro system-font styling for the parts list, palette, view tabs, zoom controls, and action buttons
 
 ---
 
