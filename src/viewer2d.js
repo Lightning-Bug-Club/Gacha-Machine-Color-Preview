@@ -28,7 +28,7 @@ const LAYER_ID_MAP = {
 };
 
 const FIXED_LAYERS = {
-  'Top_Chamber_x5F_Inside': '#FFFFFF',
+  'Top_Chamber_x5F_Inside': null, // filled dynamically: VIEWER_BG on screen, #FFFFFF in PDF
   'Top_Chamber_x5F_Inside_x5F_Back': null,
   'Black': '#565656',
 };
@@ -46,6 +46,9 @@ const DRAG_THRESHOLD_PX = 4;
 const DEFAULT_WINDOW_COLOR_ID = 'basic-pla-jade-white';
 const SHAPE_SELECTOR = 'path, polygon, polyline, rect, circle, ellipse, line';
 
+/** Background color of the viewer stage — used to fill Top_Chamber_x5F_Inside so it looks see-through. */
+export const VIEWER_BG = '#b7b7b7';
+
 let _svgRoot = null;
 let _containerEl = null;
 let _currentView = 'front';
@@ -53,7 +56,9 @@ let _unsubscribe = null;
 let _defaultViewBox = null;
 let _sessionViewBox = null;
 let _dragState = null;
-let _suppressPartClick = false;
+// Set to true briefly after endDrag fires a part-selection, to suppress the
+// redundant click event that may also fire from pointer-capture release.
+let _suppressNextClick = false;
 
 export async function initViewer(containerEl, viewName = 'front') {
   _containerEl = containerEl;
@@ -117,7 +122,8 @@ export async function createPreviewSVG(viewName, state = getState()) {
       await _fitWindowOverlay(svgEl);
     }
 
-    _applyStateToSVG(svgEl, { ...state, selectedPartId: null }, nextView);
+    // isPDF=true: render Top_Chamber_Inside as white so it looks like an opening on white page
+    _applyStateToSVG(svgEl, { ...state, selectedPartId: null }, nextView, true);
     return svgEl;
   } finally {
     holder.remove();
@@ -161,10 +167,9 @@ function _wirePartSelection(svgEl) {
   svgEl.querySelectorAll('[data-part]').forEach(el => {
     el.style.cursor = 'pointer';
     el.addEventListener('click', e => {
-      if (_suppressPartClick) {
-        e.preventDefault();
+      if (_suppressNextClick) {
+        _suppressNextClick = false;
         e.stopPropagation();
-        _suppressPartClick = false;
         return;
       }
       e.stopPropagation();
@@ -193,9 +198,13 @@ function _wireInteractiveViewport(svgEl) {
   }, { passive: false });
 
   svgEl.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || !_isZoomedIn(svgEl)) return;
+    if (e.button !== 0) return;
     const rect = svgEl.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+
+    // Record the deepest [data-part] element under the pointer at mousedown time
+    // so we can fire part selection on pointerup if no drag occurred.
+    const partEl = e.target.closest('[data-part]');
 
     _dragState = {
       pointerId: e.pointerId,
@@ -203,15 +212,20 @@ function _wireInteractiveViewport(svgEl) {
       startY: e.clientY,
       startViewBox: _readViewBox(svgEl),
       moved: false,
+      targetPartEl: partEl || null,
     };
 
-    _suppressPartClick = false;
-    svgEl.setPointerCapture(e.pointerId);
-    svgEl.classList.add('is-panning');
+    // Only capture pointer and show drag cursor when zoomed in
+    if (_isZoomedIn(svgEl)) {
+      svgEl.setPointerCapture(e.pointerId);
+      svgEl.classList.add('is-panning');
+    }
   });
 
   svgEl.addEventListener('pointermove', e => {
     if (!_dragState || e.pointerId !== _dragState.pointerId || !_defaultViewBox) return;
+    if (!_isZoomedIn(svgEl)) return; // only pan when zoomed in
+
     const rect = svgEl.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
 
@@ -219,17 +233,18 @@ function _wireInteractiveViewport(svgEl) {
     const dy = e.clientY - _dragState.startY;
     if (!_dragState.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
       _dragState.moved = true;
-      _suppressPartClick = true;
     }
 
-    const scaleX = _dragState.startViewBox.width / rect.width;
-    const scaleY = _dragState.startViewBox.height / rect.height;
-    _applyViewBox(svgEl, {
-      x: _dragState.startViewBox.x - dx * scaleX,
-      y: _dragState.startViewBox.y - dy * scaleY,
-      width: _dragState.startViewBox.width,
-      height: _dragState.startViewBox.height,
-    });
+    if (_dragState.moved) {
+      const scaleX = _dragState.startViewBox.width / rect.width;
+      const scaleY = _dragState.startViewBox.height / rect.height;
+      _applyViewBox(svgEl, {
+        x: _dragState.startViewBox.x - dx * scaleX,
+        y: _dragState.startViewBox.y - dy * scaleY,
+        width: _dragState.startViewBox.width,
+        height: _dragState.startViewBox.height,
+      });
+    }
   });
 
   const endDrag = e => {
@@ -237,11 +252,17 @@ function _wireInteractiveViewport(svgEl) {
     if (svgEl.hasPointerCapture?.(e.pointerId)) {
       svgEl.releasePointerCapture(e.pointerId);
     }
-    if (_dragState.moved) {
-      setTimeout(() => { _suppressPartClick = false; }, 0);
-    } else {
-      _suppressPartClick = false;
+
+    // When zoomed in, pointer capture is active, which prevents click events
+    // from reaching child [data-part] elements. Handle part selection here instead.
+    // At normal zoom, click events fire normally on child elements, so skip here.
+    if (!_dragState.moved && _dragState.targetPartEl && _isZoomedIn(svgEl)) {
+      _suppressNextClick = true; // suppress the redundant click that may still fire
+      setSelectedPart(_dragState.targetPartEl.getAttribute('data-part'));
+    } else if (_dragState.moved) {
+      _suppressNextClick = true; // suppress click after a real drag/pan
     }
+
     svgEl.classList.remove('is-panning');
     _dragState = null;
   };
@@ -328,10 +349,10 @@ function _getLegacyWindowBox(svgEl) {
 }
 
 function _applyState(state) {
-  _applyStateToSVG(_svgRoot, state, _currentView);
+  _applyStateToSVG(_svgRoot, state, _currentView, false);
 }
 
-function _applyStateToSVG(svgRoot, state, viewName) {
+function _applyStateToSVG(svgRoot, state, viewName, isPDF = false) {
   if (!svgRoot) return;
 
   const topChamberHex = state.selections['top-chamber']
@@ -362,7 +383,9 @@ function _applyStateToSVG(svgRoot, state, viewName) {
   svgRoot.querySelectorAll('[data-fixed-layer]').forEach(el => {
     const rawId = el.getAttribute('data-fixed-layer');
     if (rawId === 'Top_Chamber_x5F_Inside') {
-      _setFillRecursive(el, '#FFFFFF');
+      // On screen: match viewer stage background so it looks like an opening.
+      // In PDF: use white so it reads as an opening on the white page.
+      _setFillRecursive(el, isPDF ? '#FFFFFF' : VIEWER_BG);
     } else if (rawId === 'Top_Chamber_x5F_Inside_x5F_Back') {
       if (topChamberHex) _setFillRecursive(el, topChamberHex);
     } else if (rawId === 'Black') {

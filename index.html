@@ -16,6 +16,9 @@
   <header class="app-chrome">
       <h1>⚙️ Gata-Gata Gacha Machine — Color Customizer</h1>
       <div class="header-actions">
+        <button id="btn-reset-colors" class="btn btn-secondary" title="Reset all parts to white">
+          🔄 Reset Colors
+        </button>
         <button id="btn-share" class="btn btn-secondary" title="Copy shareable link">
           🔗 Share
         </button>
@@ -26,7 +29,8 @@
     </header>
 
     <div id="instruction-banner" class="info-banner" role="note">
-      Click a part of the machine, then choose a color from the palette to customize your gacha machine.
+      <span class="banner-icon">ℹ️</span>
+      <strong>How to use:</strong> Click a part of the machine, then choose a color from the palette to customize your gacha machine.
     </div>
 
     <!-- ── Parts sidebar ──────────────────────────────────────────────── -->
@@ -81,6 +85,20 @@
       <h2>Bambu PLA Colors</h2>
       <div id="selected-info">
         <span id="selected-color"></span>
+      </div>
+      <div id="randomize-bar">
+        <label for="harmony-select" class="harmony-label">Harmony:</label>
+        <select id="harmony-select" class="harmony-select">
+          <option value="analogous">Analogous</option>
+          <option value="complementary">Complementary</option>
+          <option value="split-complementary">Split-Complementary</option>
+          <option value="triad">Triad</option>
+          <option value="square">Square</option>
+          <option value="monochromatic">Monochromatic</option>
+        </select>
+        <button id="btn-randomize" class="btn btn-secondary" title="Randomize colors using the selected harmony">
+          🎲 Randomize
+        </button>
       </div>
       <div id="palette-scroll">
         <div id="palette-grid"></div>
