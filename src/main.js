@@ -14,6 +14,7 @@ import {
   subscribe,
   decodeStateFromURL,
   pushStateToURL,
+  resetSelectionsToDefault,
 } from './state.js';
 import {
   initViewer,
@@ -25,6 +26,7 @@ import {
   resetViewTransform,
 } from './viewer2d.js';
 import { exportPDF } from './pdf.js';
+import { randomizeHarmony, HARMONIES } from './harmony.js';
 
 const SERIES_ORDER = [
   'Basic PLA',
@@ -62,8 +64,10 @@ async function init() {
 
   // ── Build parts list sidebar ──────────────────────────────────────────────
   const partsList = document.getElementById('parts-list');
-  // Exclude 'window' from the main parts list (it's controlled via the windows selector)
+  // Exclude 'window' from the main parts list — managed separately below
   const displayParts = parts.filter(p => p.id !== 'window');
+  const windowPart = parts.find(p => p.id === 'window');
+
   displayParts.forEach(part => {
     const li = document.createElement('li');
     li.className = 'part-item';
@@ -72,6 +76,23 @@ async function init() {
     li.addEventListener('click', () => setSelectedPart(part.id));
     partsList.appendChild(li);
   });
+
+  // Window row — shown only when 3D-printed windows is active
+  let windowLi = null;
+  if (windowPart) {
+    windowLi = document.createElement('li');
+    windowLi.className = 'part-item window-part-item';
+    windowLi.dataset.partId = 'window';
+    windowLi.textContent = windowPart.label || 'Window';
+    windowLi.addEventListener('click', () => {
+      if (getState().windowsMaterial === 'printed') {
+        setSelectedPart('window');
+      }
+    });
+    partsList.appendChild(windowLi);
+    // Initial visibility
+    windowLi.style.display = getState().windowsMaterial === 'printed' ? '' : 'none';
+  }
 
   // ── Windows material selector ─────────────────────────────────────────────
   _wireWindowsSelector();
@@ -96,6 +117,16 @@ async function init() {
     partsList.querySelectorAll('.part-item').forEach(li => {
       li.classList.toggle('selected', li.dataset.partId === snap.selectedPartId);
     });
+
+    // Show/hide window row based on material
+    if (windowLi) {
+      const show = snap.windowsMaterial === 'printed';
+      windowLi.style.display = show ? '' : 'none';
+      // If switching to acrylic while window is selected, deselect it
+      if (!show && snap.selectedPartId === 'window') {
+        setSelectedPart(null);
+      }
+    }
 
     // Show color name & swatch for selected part
     const activeColorId = snap.selectedPartId
@@ -165,6 +196,43 @@ async function init() {
       } else {
         prompt('Copy this link to share your config:', url);
       }
+    });
+  }
+
+  // ── Reset Colors button ───────────────────────────────────────────────────
+  const btnReset = document.getElementById('btn-reset-colors');
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      resetSelectionsToDefault(getParts());
+      setSelectedPart(null);
+      _showToast('All parts reset to white.');
+    });
+  }
+
+  // ── Randomize button ──────────────────────────────────────────────────────
+  const btnRandomize = document.getElementById('btn-randomize');
+  const harmonySelect = document.getElementById('harmony-select');
+  if (btnRandomize && harmonySelect) {
+    btnRandomize.addEventListener('click', () => {
+      const harmony = harmonySelect.value;
+      const palette = getColors();
+      const harmonyColors = randomizeHarmony(harmony, palette);
+
+      const allParts = getParts();
+      const state = getState();
+      const isPrinted = state.windowsMaterial === 'printed';
+
+      // Distribute harmonious colors across parts by cycling through the palette
+      allParts.forEach((part, index) => {
+        if (part.id === 'window' && !isPrinted) return; // skip window if acrylic
+        const colorEntry = harmonyColors[index % harmonyColors.length];
+        if (colorEntry) {
+          setPartColor(part.id, colorEntry.id);
+        }
+      });
+
+      const harmonyLabel = HARMONIES.find(h => h.value === harmony)?.label || harmony;
+      _showToast(`Randomized with ${harmonyLabel} harmony!`);
     });
   }
 }

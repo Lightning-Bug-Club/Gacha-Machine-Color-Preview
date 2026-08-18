@@ -71,12 +71,43 @@ export async function exportPDF({
       topY += 6;
     }
 
+    // Fill entire header area (both rows) with dark background
     doc.setFillColor(50, 50, 50);
-    doc.rect(MARGIN, topY, CONTENT_W, TABLE_HEADER_TOP_H, 'F');
-    doc.rect(MARGIN, topY + TABLE_HEADER_TOP_H, CONTENT_W, TABLE_HEADER_SUB_H, 'F');
+    doc.rect(MARGIN, topY, CONTENT_W, TABLE_HEADER_H, 'F');
 
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+
+    // "Part", "Bambu Color", "Hex" span both header rows — draw text centered
+    // vertically over the full header height (no horizontal divider under them).
+    const fullHeaderMidY = topY + TABLE_HEADER_H / 2 + 3; // +3 for jsPDF baseline offset
+    doc.text('Part', columns.part.x + 1, fullHeaderMidY);
+    doc.text('Bambu Color', columns.color.x + 1, fullHeaderMidY);
+    doc.text('Hex', columns.hex.x + 1, fullHeaderMidY);
+
+    // "Filament Usage" spans Bitty+Biggy columns in the TOP sub-row only
+    doc.text(
+      'Filament Usage',
+      columns.bitty.x + (columns.bitty.width + columns.biggy.width) / 2,
+      topY + TABLE_HEADER_TOP_H / 2 + 3,
+      { align: 'center' }
+    );
+
+    // Horizontal divider ONLY under "Filament Usage" (between the two sub-rows,
+    // but only spanning the Filament Usage group columns, not Part/Color/Hex).
+    doc.setDrawColor(210);
+    doc.line(columns.bitty.x, topY + TABLE_HEADER_TOP_H, MARGIN + CONTENT_W, topY + TABLE_HEADER_TOP_H);
+
+    // Sub-labels "Bitty" and "Biggy" in the BOTTOM sub-row
+    doc.text('Bitty', columns.bitty.x + columns.bitty.width / 2, topY + TABLE_HEADER_TOP_H + TABLE_HEADER_SUB_H / 2 + 3, { align: 'center' });
+    doc.text('Biggy', columns.biggy.x + columns.biggy.width / 2, topY + TABLE_HEADER_TOP_H + TABLE_HEADER_SUB_H / 2 + 3, { align: 'center' });
+
+    // Outer border around the full header
     doc.setDrawColor(210);
     doc.rect(MARGIN, topY, CONTENT_W, TABLE_HEADER_H, 'S');
+
+    // Vertical column dividers (spanning full header height)
     [
       columns.part.x,
       columns.color.x,
@@ -85,22 +116,9 @@ export async function exportPDF({
       columns.biggy.x,
       MARGIN + CONTENT_W,
     ].forEach(x => doc.line(x, topY, x, topY + TABLE_HEADER_H));
-    doc.line(MARGIN, topY + TABLE_HEADER_TOP_H, MARGIN + CONTENT_W, topY + TABLE_HEADER_TOP_H);
 
-    doc.setTextColor(255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text('Part', columns.part.x + 1, topY + 6.8);
-    doc.text('Bambu Color', columns.color.x + 1, topY + 6.8);
-    doc.text('Hex', columns.hex.x + 1, topY + 6.8);
-    doc.text(
-      'Filament Usage',
-      columns.bitty.x + (columns.bitty.width + columns.biggy.width) / 2,
-      topY + 3.6,
-      { align: 'center' }
-    );
-    doc.text('Bitty', columns.bitty.x + columns.bitty.width / 2, topY + 8.8, { align: 'center' });
-    doc.text('Biggy', columns.biggy.x + columns.biggy.width / 2, topY + 8.8, { align: 'center' });
+    // Vertical divider between Bitty and Biggy only in the bottom sub-row
+    // (already drawn above as part of column dividers — this is intentional)
 
     doc.setTextColor(0);
     doc.setFont('helvetica', 'normal');

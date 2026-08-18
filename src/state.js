@@ -39,6 +39,17 @@ export function setPartColor(partId, colorId) {
   _notify();
 }
 
+/** Reset all part color selections to their default color (e.g. white for all). */
+export function resetSelectionsToDefault(parts) {
+  const defaults = {};
+  parts.forEach(part => {
+    defaults[part.id] = part.defaultColorId;
+  });
+  _state = { ..._state, selections: defaults };
+  // Clear the URL c= param so the reset is reflected in the share URL
+  _notify();
+}
+
 /** Set the currently selected part (for UI highlighting). */
 export function setSelectedPart(partId) {
   _state = { ..._state, selectedPartId: partId };
