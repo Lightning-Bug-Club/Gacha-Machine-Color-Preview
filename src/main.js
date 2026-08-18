@@ -11,6 +11,7 @@ import {
   setPartColor,
   setSelectedPart,
   setWindowsMaterial,
+  loadSelections,
   subscribe,
   decodeStateFromURL,
   pushStateToURL,
@@ -27,6 +28,7 @@ import {
 } from './viewer2d.js';
 import { exportPDF } from './pdf.js';
 import { randomizeHarmony, HARMONIES } from './harmony.js';
+import { listBuilds, saveBuild, deleteBuild, upsertBuild, getMaxBuilds } from './builds.js';
 
 const SERIES_ORDER = [
   'Basic PLA',
@@ -37,9 +39,19 @@ const SERIES_ORDER = [
   'PLA Glow',
 ];
 
+const USER_COLORS_STORAGE_KEY = 'gatagata.userColors.v1';
+const USER_COLOR_SLOT_COUNT = 4;
+
+let _userColorSlots = Array(USER_COLOR_SLOT_COUNT).fill(null);
+let _activeUserColorSlot = null;
+
 async function init() {
   // ── Load data ─────────────────────────────────────────────────────────────
-  const [colors, parts] = await Promise.all([loadPalette(), loadParts()]);
+  const [colors, parts, filamentUsage] = await Promise.all([
+    loadPalette(),
+    loadParts(),
+    _loadFilamentUsage(),
+  ]);
 
   // Expose palette map globally so viewer2d.js can resolve color ids to hex
   window.__paletteMap = {};
@@ -99,7 +111,10 @@ async function init() {
 
   // ── Build color palette grid ──────────────────────────────────────────────
   const paletteGrid = document.getElementById('palette-grid');
-  _renderPaletteGroups(paletteGrid, colors);
+  _userColorSlots = _loadUserColorSlots(colors);
+  _renderPaletteGroups(paletteGrid, colors, color => _assignActiveUserColorSlot(color, colors));
+  _wireYourColorsTray(colors);
+  _wireSavedBuilds();
 
   // ── Color name tooltip label ──────────────────────────────────────────────
   const colorNameEl = document.getElementById('color-name');
@@ -178,6 +193,7 @@ async function init() {
         windowsMaterial: getState().windowsMaterial,
         parts: getParts(),
         colors: getColors(),
+        filamentUsage,
       });
       _showToast('PDF exported with Front, Side, and Back previews.');
     } catch (err) {
@@ -216,23 +232,37 @@ async function init() {
     btnRandomize.addEventListener('click', () => {
       const harmony = harmonySelect.value;
       const palette = getColors();
-      const harmonyColors = randomizeHarmony(harmony, palette);
+      const seen = new Set();
+      const userColors = _userColorSlots
+        .filter(Boolean)
+        .map(id => palette.find(color => color.id === id))
+        .filter(Boolean)
+        .filter(color => {
+          if (seen.has(color.id)) return false;
+          seen.add(color.id);
+          return true;
+        });
+      const randomizeSet = _buildRandomizeColorSet(harmony, palette, userColors);
 
       const allParts = getParts();
-      const state = getState();
-      const isPrinted = state.windowsMaterial === 'printed';
+      const currentState = getState();
+      const isPrinted = currentState.windowsMaterial === 'printed';
+      const eligibleParts = allParts.filter(part => !(part.id === 'window' && !isPrinted));
+      const randomizedPlacement = _createRandomizedPlacement(eligibleParts.length, randomizeSet);
 
-      // Distribute harmonious colors across parts by cycling through the palette
-      allParts.forEach((part, index) => {
-        if (part.id === 'window' && !isPrinted) return; // skip window if acrylic
-        const colorEntry = harmonyColors[index % harmonyColors.length];
+      eligibleParts.forEach((part, index) => {
+        const colorEntry = randomizedPlacement[index];
         if (colorEntry) {
           setPartColor(part.id, colorEntry.id);
         }
       });
 
       const harmonyLabel = HARMONIES.find(h => h.value === harmony)?.label || harmony;
-      _showToast(`Randomized with ${harmonyLabel} harmony!`);
+      if (userColors.length > 0) {
+        _showToast(`Randomized using ${userColors.length} Your Color${userColors.length > 1 ? 's' : ''} + ${harmonyLabel}.`);
+      } else {
+        _showToast(`Randomized with ${harmonyLabel} harmony.`);
+      }
     });
   }
 }
@@ -299,7 +329,7 @@ function _wireWindowsSelector() {
   });
 }
 
-function _renderPaletteGroups(containerEl, colors) {
+function _renderPaletteGroups(containerEl, colors, onSwatchClick = null) {
   const grouped = colors.reduce((map, color) => {
     const key = color.series || 'Other';
     if (!map.has(key)) map.set(key, []);
@@ -342,6 +372,10 @@ function _renderPaletteGroups(containerEl, colors) {
       }
 
       btn.addEventListener('click', () => {
+        if (onSwatchClick && onSwatchClick(color) === true) {
+          return;
+        }
+
         const { selectedPartId, windowsMaterial } = getState();
         if (!selectedPartId) {
           _showToast('Select a part first, then choose a color.');
@@ -361,6 +395,229 @@ function _renderPaletteGroups(containerEl, colors) {
     section.appendChild(groupGrid);
     containerEl.appendChild(section);
   });
+}
+
+function _wireYourColorsTray(colors) {
+  const tray = document.getElementById('your-colors-tray');
+  if (!tray) return;
+
+  tray.innerHTML = '';
+  for (let index = 0; index < USER_COLOR_SLOT_COUNT; index += 1) {
+    const button = document.createElement('button');
+    button.className = 'user-color-slot';
+    button.type = 'button';
+    button.dataset.slotIndex = String(index);
+    button.addEventListener('click', () => {
+      _activeUserColorSlot = index;
+      _renderYourColorsTray(colors);
+    });
+    tray.appendChild(button);
+  }
+
+  document.getElementById('btn-clear-active-user-color')?.addEventListener('click', () => {
+    if (_activeUserColorSlot === null) {
+      _showToast('Select a Your Colors slot first.');
+      return;
+    }
+    _userColorSlots[_activeUserColorSlot] = null;
+    _saveUserColorSlots();
+    _renderYourColorsTray(colors);
+    _showToast('Your Colors slot cleared.');
+  });
+
+  _renderYourColorsTray(colors);
+}
+
+function _renderYourColorsTray(colors) {
+  const tray = document.getElementById('your-colors-tray');
+  if (!tray) return;
+
+  tray.querySelectorAll('.user-color-slot').forEach((slotEl, index) => {
+    const colorId = _userColorSlots[index];
+    const color = colorId ? colors.find(entry => entry.id === colorId) : null;
+    slotEl.classList.toggle('active', _activeUserColorSlot === index);
+    slotEl.style.backgroundColor = color?.hex || '#f2f2f2';
+    slotEl.textContent = color ? `${index + 1}` : '+';
+    slotEl.title = color
+      ? `Slot ${index + 1}: ${color.name} (${color.hex})`
+      : `Slot ${index + 1}: click to activate, then click a palette swatch`;
+  });
+}
+
+function _assignActiveUserColorSlot(color, colors) {
+  if (_activeUserColorSlot === null) return false;
+  const slotIndex = _activeUserColorSlot;
+  _userColorSlots[_activeUserColorSlot] = color.id;
+  _activeUserColorSlot = null;
+  _saveUserColorSlots();
+  _renderYourColorsTray(colors);
+  _showToast(`Saved ${color.name} to Your Colors slot ${slotIndex + 1}.`);
+  return true;
+}
+
+function _wireSavedBuilds() {
+  const listEl = document.getElementById('saved-builds-list');
+  const saveButton = document.getElementById('btn-save-build');
+  if (!listEl || !saveButton) return;
+
+  const refresh = () => {
+    const builds = listBuilds();
+    listEl.innerHTML = '';
+
+    builds.forEach(build => {
+      const li = document.createElement('li');
+      li.className = 'saved-build-item';
+
+      const label = document.createElement('span');
+      label.className = 'saved-build-name';
+      label.textContent = build.name;
+      label.title = `${build.name} — ${new Date(build.savedAt).toLocaleString()}`;
+      li.appendChild(label);
+
+      const actions = document.createElement('div');
+      actions.className = 'saved-build-actions';
+
+      const loadBtn = document.createElement('button');
+      loadBtn.type = 'button';
+      loadBtn.className = 'btn btn-secondary btn-sm';
+      loadBtn.textContent = 'Load';
+      loadBtn.addEventListener('click', () => {
+        setWindowsMaterial(build.windowsMaterial === 'acrylic' ? 'acrylic' : 'printed');
+        loadSelections(build.selections || {});
+        setSelectedPart(null);
+        _showToast(`Loaded build: ${build.name}`);
+      });
+      actions.appendChild(loadBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn btn-secondary btn-sm';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => {
+        const result = deleteBuild(build.id);
+        if (!result.ok) {
+          _showToast('Could not delete saved build. Check browser storage permissions.');
+          return;
+        }
+        refresh();
+        _showToast(`Deleted build: ${build.name}`);
+      });
+      actions.appendChild(deleteBtn);
+
+      li.appendChild(actions);
+      listEl.appendChild(li);
+    });
+
+    const remaining = getMaxBuilds() - builds.length;
+    saveButton.title = remaining > 0
+      ? `${remaining} save slot${remaining > 1 ? 's' : ''} remaining`
+      : 'Saved builds are full (max 5). Delete one or overwrite by using an existing name.';
+  };
+
+  saveButton.addEventListener('click', () => {
+    const existing = listBuilds();
+    const entered = prompt('Enter a name for this build:');
+    if (entered === null) return;
+    const name = entered.trim() || `Build ${existing.length + 1}`;
+    const match = existing.find(build => build.name.toLowerCase() === name.toLowerCase());
+    const payload = {
+      name,
+      selections: getState().selections,
+      windowsMaterial: getState().windowsMaterial,
+    };
+
+    if (match) {
+      const shouldOverwrite = confirm(`Overwrite existing saved build "${match.name}"?`);
+      if (!shouldOverwrite) return;
+      const result = upsertBuild({ ...payload, id: match.id });
+      if (!result.ok) {
+        _showToast('Could not overwrite saved build. Check browser storage permissions.');
+        return;
+      }
+      refresh();
+      _showToast(`Overwrote build: ${name}`);
+      return;
+    }
+
+    const saved = saveBuild(payload);
+    if (!saved.ok) {
+      if (saved.reason === 'full') {
+        _showToast('Saved builds are full (max 5). Delete one or overwrite an existing name.');
+      } else {
+        _showToast('Could not save build. Check browser storage permissions.');
+      }
+      return;
+    }
+    refresh();
+    _showToast(`Saved build: ${name}`);
+  });
+
+  refresh();
+}
+
+function _loadUserColorSlots(colors) {
+  try {
+    const raw = window.localStorage.getItem(USER_COLORS_STORAGE_KEY);
+    if (!raw) return Array(USER_COLOR_SLOT_COUNT).fill(null);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return Array(USER_COLOR_SLOT_COUNT).fill(null);
+    const validIds = new Set(colors.map(color => color.id));
+    return Array.from({ length: USER_COLOR_SLOT_COUNT }, (_, index) => {
+      const value = parsed[index];
+      return typeof value === 'string' && validIds.has(value) ? value : null;
+    });
+  } catch (_) {
+    return Array(USER_COLOR_SLOT_COUNT).fill(null);
+  }
+}
+
+function _saveUserColorSlots() {
+  try {
+    window.localStorage.setItem(USER_COLORS_STORAGE_KEY, JSON.stringify(_userColorSlots));
+  } catch (_) {
+    // Ignore storage write errors and keep in-memory state.
+  }
+}
+
+function _buildRandomizeColorSet(harmony, palette, userColors) {
+  if (userColors.length === 0) {
+    return randomizeHarmony(harmony, palette).slice(0, USER_COLOR_SLOT_COUNT);
+  }
+
+  const set = [...userColors];
+  let attempts = 0;
+  while (set.length < USER_COLOR_SLOT_COUNT && attempts < 20) {
+    attempts += 1;
+    const harmonyColors = randomizeHarmony(harmony, palette);
+    const next = harmonyColors.find(color => !set.some(entry => entry.id === color.id)) || harmonyColors[0];
+    if (!next) break;
+    set.push(next);
+  }
+  return set.slice(0, USER_COLOR_SLOT_COUNT);
+}
+
+function _createRandomizedPlacement(partCount, colorSet) {
+  if (!partCount || !colorSet.length) return [];
+  const repeated = [];
+  while (repeated.length < partCount) {
+    repeated.push(...colorSet);
+  }
+  const assignments = repeated.slice(0, partCount);
+  for (let i = assignments.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [assignments[i], assignments[j]] = [assignments[j], assignments[i]];
+  }
+  return assignments;
+}
+
+async function _loadFilamentUsage() {
+  try {
+    const res = await fetch('./data/filament-usage.json');
+    if (!res.ok) return {};
+    return await res.json();
+  } catch (_) {
+    return {};
+  }
 }
 
 /** Convert the current inline SVG view to a PNG data URL via canvas. */
