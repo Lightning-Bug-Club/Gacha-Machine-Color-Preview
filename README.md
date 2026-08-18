@@ -41,6 +41,28 @@ Colors are grouped by Bambu PLA series. The selectable palette intentionally exc
 
 The remaining groups keep **Basic PLA** first, followed by **PLA Matte**, **PLA Silk**, **PLA Wood**, **PLA Translucent**, **PLA Glow**, and any other non-excluded series.
 
+### Your Colors tray + smarter randomize
+
+The palette panel includes a **Your Colors** tray with 4 slots.
+- Click a slot to make it active, then click any palette swatch to assign that color to the slot.
+- Use **Clear Slot** to remove the active slot color.
+- Slot choices are saved in browser storage so they persist on refresh.
+
+Randomize now works with the harmony selector and your slots together:
+- If 0 slots are chosen: randomize uses pure harmony generation (analogous, complementary, split-complementary, triad, square, monochromatic).
+- If 1–4 slots are chosen: randomize uses those choices and fills any remainder up to 4 with harmony-generated colors snapped to the nearest selectable Bambu PLA colors.
+- The resulting up-to-4 colors are then shuffled and randomly placed across parts each click.
+- If windows are set to **Clear acrylic**, the window part is skipped.
+
+### Saved Builds (localStorage, max 5)
+
+The palette panel also includes a **Saved Builds** section.
+- Save the current configuration (name + all part color selections + windows material).
+- Load a saved build at any time to restore viewer + share URL state.
+- Delete saved builds you no longer need.
+- Up to 5 saved builds are stored per browser using `localStorage` key `gatagata.savedBuilds.v1`.
+- If the browser storage is unavailable/corrupt, the app gracefully falls back to an empty saved-build list.
+
 ### Top Chamber — multi-layer follower
 
 The sidebar shows a single **Top Chamber** part.  
@@ -50,7 +72,7 @@ Behind the scenes it governs three SVG layers:
 |-------|----------|
 | `Top Chamber_Outside` | User's chosen color |
 | `Top Chamber_Inside_Back` | Always mirrors the user's chosen color |
-| `Top Chamber_Inside` | Always white (`#FFFFFF`) — fixed, never editable |
+| `Top Chamber_Inside` | On-screen: viewer background gray (`#b7b7b7`) to appear see-through; PDF preview path: white (`#FFFFFF`) |
 
 ### Black layer — always fixed gray
 
@@ -59,7 +81,7 @@ It is not selectable and does not appear in the parts list.
 
 ### Windows material selector
 
-Below the parts list is a **Windows** section with two options:
+Directly above the parts list is a prominent **Windows** section with two options:
 
 | Option | Behavior |
 |--------|----------|
@@ -71,7 +93,8 @@ Below the parts list is a **Windows** section with two options:
 ### Default white loadout + instruction banner
 
 All machine parts, including the printed windows, now default to **Basic PLA Jade White** (`basic-pla-jade-white`) on first load.  
-To keep white parts readable, the SVG viewer preserves visible outlines/strokes, and the page shows a top instruction banner telling the user to click a part first and then choose a color.
+To keep white parts readable, the SVG viewer preserves visible outlines/strokes, and the page shows a top instruction banner telling the user to click a part first and then choose a color.  
+The overall UI text sizing has also been increased for readability while preserving the Win95 look.
 
 ### Shareable URL
 
@@ -81,8 +104,10 @@ The **Share** button copies a URL that encodes all current color selections **an
 
 The **Export PDF** button generates a build blueprint PDF containing:
 - Framed **Front / Side / Back** raster previews in a single row on page 1, each scaled proportionally to avoid distortion
-- A legend table with part names, color swatches, hex codes, and blank **Filament Usage** columns for **Bitty** and **Biggy**
+- A legend table with part names, color swatches, hex codes, and per-part **Filament Usage** values for **Bitty** and **Biggy** (grams)
 - For windows: `Windows: Clear acrylic` (no color) or `Windows (×2)` with the chosen color
+- A **Filament Needed by Color** summary table listing each distinct color in use with Bitty/Biggy gram totals
+- Notes that coin usage estimates are for 25 coins and Lid Lock usage is an estimated 6 g
 
 The previews remain resilient during export: if one view fails to rasterize, the PDF still downloads.
 
@@ -108,6 +133,7 @@ The app now uses a **Windows 95-inspired** interface:
 │   ├── palette.js           # Palette loader
 │   ├── parts.js             # Parts loader
 │   ├── pdf.js               # PDF export
+│   ├── builds.js            # Saved builds (localStorage) helpers
 │   └── styles.css           # App styles
 ├── assets/
 │   ├── machine-front.svg    # Finalized front-view artwork
@@ -115,7 +141,8 @@ The app now uses a **Windows 95-inspired** interface:
 │   └── machine-back.svg     # Finalized back-view artwork
 ├── data/
 │   ├── parts.json           # Part definitions with logical ids, labels, qty, defaultColorId
-│   └── bambu-pla-colors.json # Bambu PLA color catalog
+│   ├── bambu-pla-colors.json # Bambu PLA color catalog
+│   └── filament-usage.json  # Per-part filament usage estimates (bitty/biggy grams)
 └── scripts/
     └── fetch_bambu_pla.py   # Scraper for updating the color catalog
 ```
@@ -150,7 +177,7 @@ Fixed/follower layers are tagged with `data-fixed-layer` and handled separately 
 
 | SVG layer id | Fixed behavior |
 |---|---|
-| `Top_Chamber_x5F_Inside` | Always `#FFFFFF` |
+| `Top_Chamber_x5F_Inside` | On-screen `#b7b7b7` (viewer background match), white in PDF preview rendering |
 | `Top_Chamber_x5F_Inside_x5F_Back` | Always mirrors `top-chamber` user color |
 | `Black` | Always `#565656` |
 

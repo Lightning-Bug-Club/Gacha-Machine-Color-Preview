@@ -36,8 +36,6 @@
     <!-- ── Parts sidebar ──────────────────────────────────────────────── -->
     <aside id="sidebar" class="panel-window">
       <h2>Parts</h2>
-      <ul id="parts-list"></ul>
-
       <!-- Windows material selector -->
       <div id="windows-material-selector">
         <h3>Windows</h3>
@@ -50,6 +48,7 @@
           Clear acrylic windows
         </label>
       </div>
+      <ul id="parts-list"></ul>
     </aside>
 
     <!-- ── 2D Viewer ──────────────────────────────────────────────────── -->
@@ -99,6 +98,24 @@
         <button id="btn-randomize" class="btn btn-secondary" title="Randomize colors using the selected harmony">
           🎲 Randomize
         </button>
+      </div>
+      <div id="your-colors-section" class="palette-subpanel">
+        <div class="subpanel-title-row">
+          <h3>Your Colors</h3>
+          <button id="btn-clear-active-user-color" class="btn btn-secondary btn-sm" type="button" title="Clear active slot">
+            Clear Slot
+          </button>
+        </div>
+        <div id="your-colors-tray" aria-label="Your Colors tray"></div>
+      </div>
+      <div id="saved-builds-section" class="palette-subpanel">
+        <div class="subpanel-title-row">
+          <h3>Saved Builds</h3>
+          <button id="btn-save-build" class="btn btn-secondary btn-sm" type="button" title="Save current build">
+            💾 Save Build
+          </button>
+        </div>
+        <ul id="saved-builds-list"></ul>
       </div>
       <div id="palette-scroll">
         <div id="palette-grid"></div>
