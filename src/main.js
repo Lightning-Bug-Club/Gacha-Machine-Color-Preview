@@ -259,7 +259,7 @@ async function init() {
 
       const harmonyLabel = HARMONIES.find(h => h.value === harmony)?.label || harmony;
       if (userColors.length > 0) {
-        _showToast(`Randomized using ${userColors.length} Your Color${userColors.length > 1 ? 's' : ''} + ${harmonyLabel}.`);
+        _showToast(`Randomized using ${userColors.length} Your Color${userColors.length > 1 ? 's' : ''}.`);
       } else {
         _showToast(`Randomized with ${harmonyLabel} harmony.`);
       }
@@ -583,17 +583,7 @@ function _buildRandomizeColorSet(harmony, palette, userColors) {
   if (userColors.length === 0) {
     return randomizeHarmony(harmony, palette).slice(0, USER_COLOR_SLOT_COUNT);
   }
-
-  const set = [...userColors];
-  let attempts = 0;
-  while (set.length < USER_COLOR_SLOT_COUNT && attempts < 20) {
-    attempts += 1;
-    const harmonyColors = randomizeHarmony(harmony, palette);
-    const next = harmonyColors.find(color => !set.some(entry => entry.id === color.id)) || harmonyColors[0];
-    if (!next) break;
-    set.push(next);
-  }
-  return set.slice(0, USER_COLOR_SLOT_COUNT);
+  return userColors.slice(0, USER_COLOR_SLOT_COUNT);
 }
 
 function _createRandomizedPlacement(partCount, colorSet) {
