@@ -50,8 +50,8 @@ The palette panel includes a **Your Colors** tray with 4 slots.
 
 Randomize now works with the harmony selector and your slots together:
 - If 0 slots are chosen: randomize uses pure harmony generation (analogous, complementary, split-complementary, triad, square, monochromatic).
-- If 1–4 slots are chosen: randomize uses those choices and fills any remainder up to 4 with harmony-generated colors snapped to the nearest selectable Bambu PLA colors.
-- The resulting up-to-4 colors are then shuffled and randomly placed across parts each click.
+- If 1–4 slots are chosen: randomize uses only those selected slot colors (no auto-fill).
+- The selected colors are then shuffled and randomly placed across parts each click.
 - If windows are set to **Clear acrylic**, the window part is skipped.
 
 ### Saved Builds (localStorage, max 5)
